@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>问卷详情</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="navbar"></div>
+<div class="container">
+  <h2 class="page-title" id="pageTitle">问卷详情</h2>
+  <div id="content"><p class="muted">加载中…</p></div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script>
+const surveyId = new URLSearchParams(location.search).get("id");
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function loadDetail() {
+  const el = document.getElementById("content");
+  if (!surveyId) { el.innerHTML = `<p class="error">缺少问卷 id</p>`; return; }
+  const user = getUser();
+  try {
+    const survey = await api.getSurvey(surveyId);
+    document.getElementById("pageTitle").textContent = survey.title;
+    const isCreator = user && survey.creator_id === user.id;
+
+    let html = `
+      <div class="card">
+        <h3>${escapeHtml(survey.title)}</h3>
+        <p class="muted">${escapeHtml(survey.description || "无描述")}</p>
+        <div>
+          <span class="badge">${survey.questions.length} 题</span>
+          <span class="badge gray">${survey.allow_anonymous ? "允许匿名" : "需登录"}</span>
+          <span class="badge gray">${survey.allow_multiple ? "可多次填写" : "限填一次"}</span>
+          ${survey.created_at ? `<span class="badge gray">创建于 ${new Date(survey.created_at).toLocaleString()}</span>` : ""}
+        </div>
+      </div>`;
+
+    if (!isCreator) {
+      html += `<p class="muted">只有创建者可以查看统计。<a href="survey.html">去问卷广场填写</a></p>`;
+      el.innerHTML = html;
+      return;
+    }
+
+    const stats = await api.stats(surveyId);
+    html += `
+      <div class="kpi-row">
+        <div class="kpi"><div class="num">${stats.total_responses}</div><div class="lbl">总回答数</div></div>
+        <div class="kpi"><div class="num">${stats.anonymous_count}</div><div class="lbl">匿名回答</div></div>
+        <div class="kpi"><div class="num">${stats.logged_in_count}</div><div class="lbl">登录回答</div></div>
+      </div>`;
+
+    if (stats.last_submitted_at) {
+      html += `<p class="muted">最近提交：${new Date(stats.last_submitted_at).toLocaleString()}</p>`;
+    }
+
+    for (const q of stats.questions) {
+      html += `<div class="card">`;
+      html += `<h3>${escapeHtml(q.title)}</h3>`;
+      html += `<p class="muted">回答人数：${q.answered} / ${stats.total_responses}</p>`;
+
+      if (q.type === "single" || q.type === "multiple") {
+        if (q.type === "multiple") html += `<p class="muted">人均选择 ${q.avg_selected} 项</p>`;
+        for (const o of q.options) {
+          html += `
+            <div class="stat-row"><span>${escapeHtml(o.label)}</span><span>${o.count}（${(o.ratio * 100).toFixed(1)}%）</span></div>
+            <div class="stat-bar"><div style="width:${(o.ratio * 100).toFixed(1)}%"></div></div>`;
+        }
+      } else if (q.type === "text") {
+        if (!q.texts.length) html += `<p class="muted">暂无文本回答</p>`;
+        else html += `<ul>${q.texts.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>`;
+      } else if (q.type === "number") {
+        html += `
+          <div class="kpi-row">
+            <div class="kpi"><div class="num">${q.avg ?? "-"}</div><div class="lbl">平均值</div></div>
+            <div class="kpi"><div class="num">${q.median ?? "-"}</div><div class="lbl">中位数</div></div>
+            <div class="kpi"><div class="num">${q.min ?? "-"}</div><div class="lbl">最小值</div></div>
+            <div class="kpi"><div class="num">${q.max ?? "-"}</div><div class="lbl">最大值</div></div>
+          </div>`;
+      }
+      html += `</div>`;
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+if (requireLogin()) {
+  renderNavbar("home");
+  loadDetail();
+}
+</script>
+</body>
+</html>

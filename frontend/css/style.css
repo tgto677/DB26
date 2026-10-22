@@ -1,0 +1,103 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f5f6fa;
+  color: #222;
+}
+a { color: #3b6cf6; text-decoration: none; }
+
+/* 导航 */
+#navbar { background: #fff; border-bottom: 1px solid #e5e7eb; }
+.nav-inner {
+  max-width: 1000px; margin: 0 auto; padding: 12px 20px;
+  display: flex; align-items: center; gap: 24px;
+}
+.nav-brand { font-weight: 700; font-size: 18px; }
+.nav-links { display: flex; gap: 16px; flex: 1; }
+.nav-links a { color: #555; padding: 4px 8px; border-radius: 6px; }
+.nav-links a.active, .nav-links a:hover { background: #eef2ff; color: #3b6cf6; }
+.nav-user { display: flex; align-items: center; gap: 12px; }
+.username { color: #555; }
+
+/* 容器 */
+.container { max-width: 1000px; margin: 24px auto; padding: 0 20px; }
+.page-title { font-size: 22px; margin: 0 0 20px; }
+.card {
+  background: #fff; border-radius: 10px; padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 14px;
+}
+.card h3 { margin: 0 0 8px; }
+.muted { color: #888; font-size: 13px; }
+
+/* 按钮 */
+.btn {
+  border: 1px solid #d0d5dd; background: #fff; color: #333;
+  padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.btn:hover { background: #f3f4f6; }
+.btn-primary { background: #3b6cf6; border-color: #3b6cf6; color: #fff; }
+.btn-primary:hover { background: #2f5be0; }
+.btn-danger { background: #ef4444; border-color: #ef4444; color: #fff; }
+.btn-sm { padding: 5px 10px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* 表单 */
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; margin-bottom: 6px; font-size: 14px; color: #444; }
+.form-group input[type=text], .form-group input[type=number],
+.form-group input[type=password], .form-group textarea, .form-group select {
+  width: 100%; padding: 9px 12px; border: 1px solid #d0d5dd;
+  border-radius: 8px; font-size: 14px; background: #fff;
+}
+.form-group textarea { resize: vertical; min-height: 70px; }
+.form-row { display: flex; gap: 12px; }
+.form-row > * { flex: 1; }
+.checkbox-line { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+
+/* 弹窗 */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal-mask.hidden { display: none; }
+.modal {
+  background: #fff; border-radius: 12px; padding: 22px 24px;
+  width: 92%; max-width: 420px; max-height: 88vh; overflow-y: auto;
+}
+.modal h3 { margin: 0 0 16px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.auth-switch { font-size: 13px; margin: 12px 0 0; }
+.error { color: #ef4444; font-size: 13px; min-height: 18px; margin: 8px 0 0; }
+
+/* 问卷卡片 */
+.survey-item { display: flex; justify-content: space-between; align-items: center; }
+.survey-item .info { flex: 1; }
+.badge {
+  display: inline-block; font-size: 12px; padding: 2px 8px;
+  border-radius: 10px; background: #eef2ff; color: #3b6cf6; margin-right: 6px;
+}
+.badge.gray { background: #f1f2f4; color: #666; }
+
+/* 创建问卷：题目块 */
+.question-block { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin-bottom: 14px; background: #fafbfc; }
+.question-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.question-head .qid { font-size: 12px; color: #888; }
+.option-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.option-row input { flex: 1; }
+.jump-rule-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 13px; }
+
+/* 填写问卷 */
+.q-title { font-weight: 600; margin-bottom: 10px; }
+.req-star { color: #ef4444; margin-left: 4px; }
+.fill-option { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.fill-hint { color: #999; font-size: 12px; margin-left: 6px; }
+
+/* 统计 */
+.stat-bar { background: #eef2ff; border-radius: 6px; height: 8px; margin: 4px 0; overflow: hidden; }
+.stat-bar > div { height: 100%; background: #3b6cf6; }
+.stat-row { display: flex; justify-content: space-between; font-size: 14px; margin-top: 8px; }
+.kpi-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.kpi { background: #fff; border-radius: 10px; padding: 14px 18px; flex: 1; min-width: 140px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.kpi .num { font-size: 24px; font-weight: 700; }
+.kpi .lbl { color: #888; font-size: 13px; }

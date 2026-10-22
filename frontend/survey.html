@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>问卷广场</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="navbar"></div>
+<div class="container">
+  <h2 class="page-title">问卷广场</h2>
+  <div id="list"><p class="muted">加载中…</p></div>
+</div>
+
+<!-- 填写弹窗 -->
+<div id="fillModal" class="modal-mask hidden">
+  <div class="modal">
+    <h3 id="fillTitle">填写问卷</h3>
+    <p class="muted" id="fillProgress"></p>
+    <div id="fillBody"></div>
+    <p class="error" id="fillError"></p>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeFillModal()">取消</button>
+      <button class="btn btn-primary" id="fillNextBtn">下一题</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/fill.js"></script>
+<script>
+async function loadList() {
+  const el = document.getElementById("list");
+  try {
+    const list = await api.listSurveys();
+    if (!list.length) { el.innerHTML = `<p class="muted">还没有问卷，去创建第一份吧～</p>`; return; }
+    el.innerHTML = list.map((s) => `
+      <div class="card survey-item">
+        <div class="info">
+          <h3>${escapeHtml(s.title)}</h3>
+          <p class="muted">${escapeHtml(s.description || "无描述")}</p>
+          <div>
+            <span class="badge">${s.questions.length} 题</span>
+            <span class="badge gray">${s.allow_anonymous ? "允许匿名" : "需登录"}</span>
+            <span class="badge gray">${s.allow_multiple ? "可多次填写" : "限填一次"}</span>
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="openFillModal('${s.id}')">填写</button>
+        </div>
+      </div>`).join("");
+  } catch (e) {
+    el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+renderNavbar("survey");
+loadList();
+</script>
+</body>
+</html>

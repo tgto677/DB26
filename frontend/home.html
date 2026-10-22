@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>个人主页</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="navbar"></div>
+<div class="container">
+  <h2 class="page-title">个人主页</h2>
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <h3>我创建的问卷</h3>
+      <p class="muted">管理你的问卷，查看结果统计</p>
+    </div>
+    <a class="btn btn-primary" href="create.html">+ 创建问卷</a>
+  </div>
+  <div id="mine"><p class="muted">加载中…</p></div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script>
+async function loadMine() {
+  const el = document.getElementById("mine");
+  try {
+    const list = await api.mySurveys();
+    if (!list.length) {
+      el.innerHTML = `<p class="muted">你还没有创建问卷。<a href="create.html">去创建</a></p>`;
+      return;
+    }
+    el.innerHTML = list.map((s) => `
+      <div class="card survey-item">
+        <div class="info">
+          <h3>${escapeHtml(s.title)}</h3>
+          <p class="muted">${escapeHtml(s.description || "无描述")}</p>
+          <div>
+            <span class="badge">${s.questions.length} 题</span>
+            <span class="badge gray">${s.allow_anonymous ? "允许匿名" : "需登录"}</span>
+            <span class="badge gray">${s.allow_multiple ? "可多次填写" : "限填一次"}</span>
+          </div>
+        </div>
+        <div>
+          <a class="btn" href="survey-detail.html?id=${s.id}">查看详情</a>
+        </div>
+      </div>`).join("");
+  } catch (e) {
+    el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+if (requireLogin()) {
+  renderNavbar("home");
+  loadMine();
+}
+</script>
+</body>
+</html>

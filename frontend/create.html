@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>创建问卷</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="navbar"></div>
+<div class="container">
+  <h2 class="page-title">创建问卷</h2>
+  <div class="card">
+    <div class="form-group">
+      <label>问卷标题 *</label>
+      <input type="text" id="surveyTitle" placeholder="例如：产品满意度调查" />
+    </div>
+    <div class="form-group">
+      <label>问卷描述</label>
+      <textarea id="surveyDesc" placeholder="选填"></textarea>
+    </div>
+    <div class="form-row">
+      <label class="checkbox-line"><input type="checkbox" id="allowAnonymous" checked /> 允许匿名填写</label>
+      <label class="checkbox-line"><input type="checkbox" id="allowMultiple" /> 允许同一人多次填写</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">题目</h3>
+      <button class="btn btn-primary" onclick="addQuestion()">+ 添加题目</button>
+    </div>
+    <div id="questions" style="margin-top:14px;"></div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;gap:10px;">
+    <button class="btn" onclick="location.href='home.html'">取消</button>
+    <button class="btn btn-primary" onclick="saveSurvey()">保存并发布</button>
+  </div>
+  <p class="error" id="createError"></p>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script>
+let questions = [];   // 题目草稿数组
+let qSeq = 1;
+
+function addQuestion() {
+  const id = "q" + (qSeq++);
+  questions.push({
+    id,
+    type: "single",
+    title: "",
+    required: false,
+    options: [ { label: "", value: "" }, { label: "", value: "" } ],
+    min_choices: 0,
+    max_choices: null,
+    min_length: 0,
+    max_length: null,
+    min_value: null,
+    max_value: null,
+    integer_only: false,
+    jump_rules: [],
+  });
+  renderQuestions();
+}
+
+function removeQuestion(id) {
+  questions = questions.filter((q) => q.id !== id);
+  renderQuestions();
+}
+
+function renderQuestions() {
+  const el = document.getElementById("questions");
+  if (!questions.length) { el.innerHTML = `<p class="muted">还没有题目，点击右上角添加。</p>`; return; }
+  el.innerHTML = questions.map((q, idx) => questionHtml(q, idx)).join("");
+}
+
+function questionHtml(q, idx) {
+  const typeOptions = [
+    ["single", "单选"],
+    ["multiple", "多选"],
+    ["text", "文本填空"],
+    ["number", "数字填空"],
+  ].map(([v, l]) => `<option value="${v}" ${q.type === v ? "selected" : ""}>${l}</option>`).join("");
+
+  let body = "";
+  if (q.type === "single" || q.type === "multiple") {
+    body += `<div style="margin-bottom:8px;"><strong>选项</strong></div>`;
+    body += q.options.map((o, oi) => `
+      <div class="option-row">
+        <input type="text" placeholder="选项文字" value="${escapeAttr(o.label)}"
+          oninput="updateOption('${q.id}',${oi},'label',this.value)" />
+        <input type="text" placeholder="值(英文/数字)" value="${escapeAttr(o.value)}"
+          oninput="updateOption('${q.id}',${oi},'value',this.value)" style="max-width:140px;" />
+        <button class="btn btn-sm btn-danger" onclick="removeOption('${q.id}',${oi})">删</button>
+      </div>`).join("");
+    body += `<button class="btn btn-sm" onclick="addOption('${q.id}')">+ 选项</button>`;
+
+    if (q.type === "multiple") {
+      body += `<div class="form-row" style="margin-top:10px;">
+        <div class="form-group"><label>最少选择</label>
+          <input type="number" min="0" value="${q.min_choices}" oninput="updateField('${q.id}','min_choices', this.value===''?0:Number(this.value))" />
+        </div>
+        <div class="form-group"><label>最多选择（留空不限）</label>
+          <input type="number" min="1" value="${q.max_choices ?? ""}" oninput="updateField('${q.id}','max_choices', this.value===''?null:Number(this.value))" />
+        </div>
+      </div>`;
+    }
+  } else if (q.type === "text") {
+    body += `<div class="form-row">
+      <div class="form-group"><label>最少字数</label>
+        <input type="number" min="0" value="${q.min_length}" oninput="updateField('${q.id}','min_length', this.value===''?0:Number(this.value))" />
+      </div>
+      <div class="form-group"><label>最多字数（留空不限）</label>
+        <input type="number" min="1" value="${q.max_length ?? ""}" oninput="updateField('${q.id}','max_length', this.value===''?null:Number(this.value))" />
+      </div>
+    </div>`;
+  } else if (q.type === "number") {
+    body += `<div class="form-row">
+      <div class="form-group"><label>最小值（留空不限）</label>
+        <input type="number" value="${q.min_value ?? ""}" oninput="updateField('${q.id}','min_value', this.value===''?null:Number(this.value))" />
+      </div>
+      <div class="form-group"><label>最大值（留空不限）</label>
+        <input type="number" value="${q.max_value ?? ""}" oninput="updateField('${q.id}','max_value', this.value===''?null:Number(this.value))" />
+      </div>
+    </div>
+    <label class="checkbox-line"><input type="checkbox" ${q.integer_only ? "checked" : ""}
+      onchange="updateField('${q.id}','integer_only', this.checked)" /> 仅允许整数</label>`;
+  }
+
+  // 跳转规则（单/多选才有意义）
+  let jumpHtml = "";
+  if (q.type === "single" || q.type === "multiple") {
+    jumpHtml = `<div style="margin-top:12px;"><strong>跳转规则</strong> <span class="muted">（选到某选项时跳到指定题目；不配置则按顺序）</span></div>`;
+    jumpHtml += (q.jump_rules || []).map((r, ri) => `
+      <div class="jump-rule-row">
+        <span>当选</span>
+        <select onchange="updateJump('${q.id}',${ri},'option_value',this.value)">
+          <option value="">--请选择选项--</option>
+          ${q.options.map((o) => `<option value="${escapeAttr(o.value)}" ${r.option_value === o.value ? "selected" : ""}>${escapeHtml(o.label || o.value)}</option>`).join("")}
+        </select>
+        <span>时跳到</span>
+        <select onchange="updateJump('${q.id}',${ri},'target_question_id',this.value || null)">
+          <option value="">--结束问卷--</option>
+          ${questions.filter((x) => x.id !== q.id).map((x) => `<option value="${x.id}" ${r.target_question_id === x.id ? "selected" : ""}>${escapeHtml(x.title || x.id)}</option>`).join("")}
+        </select>
+        <button class="btn btn-sm btn-danger" onclick="removeJump('${q.id}',${ri})">删</button>
+      </div>`).join("");
+    jumpHtml += `<button class="btn btn-sm" onclick="addJump('${q.id}')">+ 跳转规则</button>`;
+  }
+
+  return `
+  <div class="question-block">
+    <div class="question-head">
+      <span class="qid">第 ${idx + 1} 题 · id=${q.id}</span>
+      <button class="btn btn-sm btn-danger" onclick="removeQuestion('${q.id}')">删除题目</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:3;">
+        <label>题目 *</label>
+        <input type="text" value="${escapeAttr(q.title)}" oninput="updateField('${q.id}','title',this.value)" />
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label>题型</label>
+        <select onchange="changeType('${q.id}',this.value)">${typeOptions}</select>
+      </div>
+      <div class="form-group" style="flex:1;display:flex;align-items:flex-end;">
+        <label class="checkbox-line"><input type="checkbox" ${q.required ? "checked" : ""}
+          onchange="updateField('${q.id}','required',this.checked)" /> 必填</label>
+      </div>
+    </div>
+    ${body}
+    ${jumpHtml}
+  </div>`;
+}
+
+function findQ(id) { return questions.find((q) => q.id === id); }
+function updateField(id, key, val) { findQ(id)[key] = val; }
+function updateOption(id, oi, key, val) { findQ(id).options[oi][key] = val; }
+function addOption(id) { findQ(id).options.push({ label: "", value: "" }); renderQuestions(); }
+function removeOption(id, oi) { findQ(id).options.splice(oi, 1); renderQuestions(); }
+function changeType(id, type) {
+  const q = findQ(id);
+  q.type = type;
+  if ((type === "single" || type === "multiple") && (!q.options || !q.options.length)) {
+    q.options = [{ label: "", value: "" }, { label: "", value: "" }];
+  }
+  if (type === "single" || type === "text" || type === "number") q.jump_rules = q.jump_rules || [];
+  renderQuestions();
+}
+function addJump(id) { findQ(id).jump_rules.push({ option_value: "", target_question_id: null }); renderQuestions(); }
+function removeJump(id, ri) { findQ(id).jump_rules.splice(ri, 1); renderQuestions(); }
+function updateJump(id, ri, key, val) { findQ(id).jump_rules[ri][key] = val; }
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function buildPayload() {
+  const title = document.getElementById("surveyTitle").value.trim();
+  if (!title) throw "请填写问卷标题";
+  if (!questions.length) throw "至少添加一道题目";
+  const payloadQuestions = questions.map((q) => {
+    if (!q.title.trim()) throw `第 ${questions.indexOf(q) + 1} 题标题不能为空`;
+    const base = { id: q.id, title: q.title.trim(), required: !!q.required, type: q.type, jump_rules: [] };
+    if (q.type === "single" || q.type === "multiple") {
+      const options = q.options
+        .map((o) => ({ label: (o.label || "").trim(), value: (o.value || "").trim() }))
+        .filter((o) => o.label && o.value);
+      if (options.length < 1) throw `「${q.title}」至少一个有效选项（文字和值都必填）`;
+      base.options = options;
+      base.jump_rules = (q.jump_rules || [])
+        .filter((r) => r.option_value && options.some((o) => o.value === r.option_value))
+        .map((r) => ({ option_value: r.option_value, target_question_id: r.target_question_id || null }));
+      if (q.type === "multiple") {
+        base.min_choices = q.min_choices || 0;
+        base.max_choices = q.max_choices ?? null;
+      }
+    } else if (q.type === "text") {
+      base.min_length = q.min_length || 0;
+      base.max_length = q.max_length ?? null;
+    } else if (q.type === "number") {
+      base.min_value = q.min_value ?? null;
+      base.max_value = q.max_value ?? null;
+      base.integer_only = !!q.integer_only;
+    }
+    return base;
+  });
+  return {
+    title,
+    description: document.getElementById("surveyDesc").value.trim(),
+    allow_anonymous: document.getElementById("allowAnonymous").checked,
+    allow_multiple: document.getElementById("allowMultiple").checked,
+    questions: payloadQuestions,
+  };
+}
+
+async function saveSurvey() {
+  const errEl = document.getElementById("createError");
+  errEl.textContent = "";
+  let payload;
+  try { payload = buildPayload(); } catch (e) { errEl.textContent = e; return; }
+  try {
+    const created = await api.createSurvey(payload);
+    alert("创建成功！");
+    location.href = `survey-detail.html?id=${created.id}`;
+  } catch (e) {
+    errEl.textContent = e.detail || "保存失败";
+  }
+}
+
+if (requireLogin()) {
+  renderNavbar("create");
+  renderQuestions();
+}
+</script>
+</body>
+</html>
