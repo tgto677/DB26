@@ -48,6 +48,7 @@ class BaseQuestion(BaseModel):
     title: str = Field(..., min_length=1)
     required: bool = False
     jump_rules: list[JumpRule] = Field(default_factory=list)
+    source_bank_id: Optional[str] = None
 
 
 class SingleQuestion(BaseQuestion):
@@ -98,6 +99,14 @@ class NumberQuestion(BaseQuestion):
         ):
             raise ValueError("max_value 不能小于 min_value")
         return self
+    
+
+class QuestionUsageItem(BaseModel):
+    survey_id: str
+    survey_title: str
+    question_id: str
+    created_at: Optional[datetime] = None
+    response_count: int = 0
 
 
 Question = Union[SingleQuestion, MultipleQuestion, TextQuestion, NumberQuestion]

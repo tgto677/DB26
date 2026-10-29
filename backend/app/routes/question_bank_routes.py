@@ -8,7 +8,8 @@ from ..schemas import (
     QuestionBankHistoryItem,
     QuestionBankHistoryDetail,
     QuestionShareRequest,
-    QuestionCopyRequest
+    QuestionCopyRequest,
+    QuestionUsageItem
 )
 from ..services import question_bank_service
 
@@ -106,3 +107,12 @@ def copy_question(
     return question_bank_service.copy_question(
         qid, str(current_user["_id"]), payload
     )
+
+
+@router.get("/{qid}/usages", response_model=list[QuestionUsageItem])
+def list_usages(
+    qid: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """查看该题目被哪些问卷使用（仅所有者）。"""
+    return question_bank_service.list_usages(qid, str(current_user["_id"]))

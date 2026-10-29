@@ -59,4 +59,5 @@ const api = {
   bankHistoryVersion: (id, version) => request(`/api/question-bank/${id}/history/${version}`, { auth: true }),
   restoreBank: (id, version) => request(`/api/question-bank/${id}/restore/${version}`, { method: "POST", auth: true }),
   copyBank: (id, name) => request(`/api/question-bank/${id}/copy`, { method: "POST", body: name ? { name } : {}, auth: true }),
+  bankUsages: (id) => request(`/api/question-bank/${id}/usages`, { auth: true }),
 };

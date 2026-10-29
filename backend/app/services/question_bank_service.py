@@ -4,7 +4,7 @@ from typing import Optional
 from bson import ObjectId
 from fastapi import HTTPException, status
 
-from ..database import question_bank_collection, question_bank_history_collection, users_collection
+from ..database import question_bank_collection, question_bank_history_collection, users_collection, responses_collection, surveys_collection
 from ..schemas import QuestionBankCreate, QuestionBankUpdate, QuestionCopyRequest
 
 
@@ -317,3 +317,54 @@ def copy_question(qid: str, owner_id: str, payload: Optional[QuestionCopyRequest
     doc["_id"] = result.inserted_id
     _save_history(result.inserted_id, owner_id, src["question"], new_name, "create", 1)
     return bank_doc_to_out(doc)
+
+
+def list_usages(qid: str, owner_id: str) -> list[dict]:
+    """列出使用该题目库题目的问卷（仅题目所有者可查）。"""
+    oid = _parse_oid(qid)
+    doc = question_bank_collection.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    if _to_str_id(doc.get("owner_id")) != _to_str_id(owner_id):
+        raise HTTPException(status_code=403, detail="只能查看自己题目的使用情况")
+
+    bank_id = str(oid)
+    # 查该用户创建、且某题 source_bank_id == bank_id 的问卷
+    surveys = list(
+        surveys_collection.find(
+            {
+                "creator_id": _to_str_id(owner_id),
+                "questions.source_bank_id": bank_id,
+            }
+        ).sort("created_at", -1)
+    )
+    if not surveys:
+        return []
+
+    # 批量统计回答数
+    sids = [s["_id"] for s in surveys]
+    counts = {}
+    agg = responses_collection.aggregate(
+        [
+            {"$match": {"survey_id": {"$in": sids}}},
+            {"$group": {"_id": "$survey_id", "cnt": {"$sum": 1}}},
+        ]
+    )
+    for row in agg:
+        counts[row["_id"]] = row["cnt"]
+
+    result = []
+    for s in surveys:
+        # 找到该问卷中使用该题的具体题目 id（可能被复制多次，取第一个/全部）
+        for q in s.get("questions", []):
+            if q.get("source_bank_id") == bank_id:
+                result.append(
+                    {
+                        "survey_id": str(s["_id"]),
+                        "survey_title": s.get("title", ""),
+                        "question_id": q.get("id"),
+                        "created_at": s.get("created_at"),
+                        "response_count": counts.get(s["_id"], 0),
+                    }
+                )
+    return result

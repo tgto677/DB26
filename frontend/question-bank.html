@@ -83,6 +83,7 @@ async function loadList() {
                     <button class="btn btn-sm" onclick="openHistory('${item.id}')">历史</button>
                     ${item.shared_from ? "" : `<button class="btn btn-sm" onclick="shareItem('${item.id}')">分享</button>`}
                     <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}', this)">删除</button>
+                    <button class="btn btn-sm" onclick="openUsages('${item.id}')">使用情况</button>
                 </div>
             </div>
             </div>`;
@@ -367,6 +368,53 @@ async function copyItem(id) {
   }
 }
 
+async function openUsages(id) {
+  document.getElementById("usagesModal").classList.remove("hidden");
+  const el = document.getElementById("usagesList");
+  el.innerHTML = `<p class="muted">加载中…</p>`;
+  try {
+    const list = await api.bankUsages(id);
+    if (!list.length) {
+      el.innerHTML = `<p class="muted">该题目尚未被任何问卷使用。</p>`;
+      return;
+    }
+    // 按问卷聚合（同一问卷多次插入合并展示）
+    const bySurvey = {};
+    for (const it of list) {
+      if (!bySurvey[it.survey_id]) {
+        bySurvey[it.survey_id] = {
+          survey_id: it.survey_id,
+          survey_title: it.survey_title,
+          created_at: it.created_at,
+          response_count: it.response_count,
+          question_ids: [],
+        };
+      }
+      bySurvey[it.survey_id].question_ids.push(it.question_id);
+    }
+    el.innerHTML = Object.values(bySurvey).map((s) => `
+      <div class="card" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div>
+            <strong>${escapeHtml(s.survey_title)}</strong>
+            <div class="muted" style="margin-top:4px;">
+              ${s.created_at ? new Date(s.created_at).toLocaleString() : ""}
+              · 回答 ${s.response_count}
+              · 题号 ${s.question_ids.join(", ")}
+            </div>
+          </div>
+          <a class="btn btn-sm" href="/survey-detail/${s.survey_id}">查看问卷</a>
+        </div>
+      </div>`).join("");
+  } catch (e) {
+    el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+function closeUsages() {
+  document.getElementById("usagesModal").classList.add("hidden");
+}
+
 if (requireLogin()) {
   renderNavbar("bank");
   loadList();
@@ -393,6 +441,15 @@ if (requireLogin()) {
       <div id="historyDetail" style="margin-top:12px;"></div>
       <div class="modal-actions">
         <button class="btn" onclick="closeHistory()">关闭</button>
+      </div>
+    </div>
+  </div>
+  <div id="usagesModal" class="modal-mask hidden">
+    <div class="modal" style="max-width:640px;">
+      <h3>使用情况</h3>
+      <div id="usagesList"><p class="muted">加载中…</p></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeUsages()">关闭</button>
       </div>
     </div>
   </div>

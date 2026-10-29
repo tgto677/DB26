@@ -209,7 +209,14 @@ function buildPayload() {
   if (!questions.length) throw "至少添加一道题目";
   const payloadQuestions = questions.map((q) => {
     if (!q.title.trim()) throw `第 ${questions.indexOf(q) + 1} 题标题不能为空`;
-    const base = { id: q.id, title: q.title.trim(), required: !!q.required, type: q.type, jump_rules: [] };
+    const base = {
+      id: q.id,
+      title: q.title.trim(),
+      required: !!q.required,
+      type: q.type,
+      jump_rules: [],
+    };
+    if (q.source_bank_id) base.source_bank_id = q.source_bank_id;    
     if (q.type === "single" || q.type === "multiple") {
       const options = q.options
         .map((o) => ({ label: (o.label || "").trim(), value: (o.value || "").trim() }))
@@ -261,6 +268,7 @@ function currentQuestionPayload(qid) {
   const q = findQ(qid);
   if (!q.title.trim()) throw "题目标题不能为空";
   const base = { id: q.id, title: q.title.trim(), required: !!q.required, type: q.type, jump_rules: [] };
+  if (q.source_bank_id) base.source_bank_id = q.source_bank_id;
   if (q.type === "single" || q.type === "multiple") {
     const options = q.options
       .map((o) => ({ label: (o.label || "").trim(), value: (o.value || "").trim() }))
@@ -346,10 +354,9 @@ function insertFromBank(itemId) {
   const item = (bankCache || []).find((x) => x.id === itemId);
   if (!item) return;
   const q = JSON.parse(JSON.stringify(item.question));
-  // 重新生成题目 id，避免冲突；清空跳转规则（跨问卷复用无意义）
   q.id = "q" + (qSeq++);
   q.jump_rules = [];
-  // 补齐编辑器需要的字段默认值
+  q.source_bank_id = item.id;   // ← 新增：记录来源
   q.required = !!q.required;
   q.options = q.options || [];
   q.min_choices = q.min_choices ?? 0;
