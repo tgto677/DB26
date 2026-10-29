@@ -48,4 +48,8 @@ const api = {
   submit: (id, answers) => request(`/api/surveys/${id}/submit`, { method: "POST", body: { answers }, auth: !!getToken() }),
   stats: (id) => request(`/api/surveys/${id}/stats`, { auth: true }),
   deleteSurvey: (id) => request(`/api/surveys/${id}`, { method: "DELETE", auth: true }),
+  // 题目库
+  listBank: () => request("/api/question-bank", { auth: true }),
+  saveBank: (question, name) => request("/api/question-bank", { method: "POST", body: { question, name }, auth: true }),
+  deleteBank: (id) => request(`/api/question-bank/${id}`, { method: "DELETE", auth: true }),
 };

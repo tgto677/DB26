@@ -4,8 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import init_db, close_db
-from .routes import auth_routes, survey_routes, response_routes
-
+from .routes import auth_routes, survey_routes, response_routes, question_bank_routes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,6 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(question_bank_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(survey_routes.router)
 app.include_router(response_routes.router)

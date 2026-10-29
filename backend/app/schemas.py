@@ -37,6 +37,21 @@ class QuestionOption(BaseModel):
     value: str = Field(..., min_length=1)
 
 
+# ---------- 题目库 ----------
+class QuestionBankCreate(BaseModel):
+    question: Question
+    name: Optional[str] = None
+
+
+class QuestionBankOut(BaseModel):
+    id: str
+    owner_id: str
+    question: Question
+    name: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 class JumpRule(BaseModel):
     """跳转规则：选/填了某值 -> 跳到某题；target_question_id 为 None 表示结束。"""
     option_value: Optional[str] = None   # 单/多选按选项 value 触发

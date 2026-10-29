@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>我的题目库</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar"></div>
+<div class="container">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <h2 style="margin:0;">我的题目库</h2>
+      <p class="muted" style="margin:6px 0 0;">保存的题目可在创建问卷时直接复用。</p>
+    </div>
+    <a class="btn btn-primary" href="/create.html">去创建问卷</a>
+  </div>
+  <div id="list"><p class="muted">加载中…</p></div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/common.js"></script>
+<script>
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+const TYPE_LABEL = { single: "单选", multiple: "多选", text: "文本填空", number: "数字填空" };
+
+function questionSummary(q) {
+  const parts = [`<span class="badge">${TYPE_LABEL[q.type] || q.type}</span>`];
+  if (q.required) parts.push(`<span class="badge gray">必填</span>`);
+  if (q.type === "single" || q.type === "multiple") {
+    parts.push(`<span class="badge gray">${q.options.length} 个选项</span>`);
+    if (q.type === "multiple") {
+      const lo = q.min_choices || 0;
+      const hi = q.max_choices ?? "不限";
+      parts.push(`<span class="badge gray">选 ${lo}~${hi} 项</span>`);
+    }
+  } else if (q.type === "text") {
+    const hi = q.max_length ?? "不限";
+    parts.push(`<span class="badge gray">${q.min_length || 0}~${hi} 字</span>`);
+  } else if (q.type === "number") {
+    const lo = q.min_value ?? "不限";
+    const hi = q.max_value ?? "不限";
+    parts.push(`<span class="badge gray">范围 ${lo}~${hi}</span>`);
+    if (q.integer_only) parts.push(`<span class="badge gray">仅整数</span>`);
+  }
+  return parts.join("");
+}
+
+async function loadList() {
+  const el = document.getElementById("list");
+  try {
+    const list = await api.listBank();
+    if (!list.length) {
+      el.innerHTML = `<p class="muted">题目库还是空的。在创建问卷时点击题目的“存入题目库”即可保存。</p>`;
+      return;
+    }
+    el.innerHTML = list.map((item) => {
+      const q = item.question;
+      return `
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+            <div style="flex:1;">
+              <h3 style="margin:0 0 6px;">${escapeHtml(item.name || q.title)}</h3>
+              <div>${questionSummary(q)}</div>
+              ${q.type === "single" || q.type === "multiple" ? `
+                <ul style="margin:10px 0 0;color:#555;font-size:14px;">
+                  ${q.options.map((o) => `<li>${escapeHtml(o.label)}</li>`).join("")}
+                </ul>` : ""}
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}', this)">删除</button>
+          </div>
+        </div>`;
+    }).join("");
+  } catch (e) {
+    el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+async function removeItem(id, btn) {
+  if (!confirm("确定从题目库删除该题目吗？")) return;
+  btn.disabled = true;
+  try {
+    await api.deleteBank(id);
+    loadList();
+  } catch (e) {
+    alert(e.detail || "删除失败");
+    btn.disabled = false;
+  }
+}
+
+if (requireLogin()) {
+  renderNavbar("bank");
+  loadList();
+}
+</script>
+</body>
+</html>

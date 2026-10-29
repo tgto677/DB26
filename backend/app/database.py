@@ -12,6 +12,7 @@ db: Database = client[settings.MONGO_DB_NAME]
 users_collection = db["users"]
 surveys_collection = db["surveys"]
 responses_collection = db["responses"]
+question_bank_collection = db["question_bank"]
 
 
 def init_db() -> None:
@@ -27,6 +28,8 @@ def init_db() -> None:
     responses_collection.create_index([("survey_id", ASCENDING)])
     responses_collection.create_index([("submitted_at", ASCENDING)])
 
+    question_bank_collection.create_index([("owner_id", ASCENDING)])
+    question_bank_collection.create_index([("created_at", ASCENDING)])
 
 def close_db() -> None:
     """关闭连接。应用关闭时调用。"""
