@@ -1,13 +1,13 @@
 # 在线问卷系统（Online Survey System）
 
-一个基于 **FastAPI + MongoDB + 原生 HTML/JS** 的轻量级在线问卷系统。支持四种题型、条件跳转、匿名与重复填写控制，并提供结果统计。
+一个基于 **FastAPI + MongoDB + 原生 HTML/JS** 的轻量级在线问卷系统。支持四种题型、条件跳转、匿名与重复填写控制，并提供结果统计。问卷通过 URL 分享发放，无需问卷广场。
 
 ---
 
 ## ✨ 功能特性
 
 - **用户认证**：注册 / 登录，JWT 鉴权，密码 bcrypt 哈希存储
-- **问卷管理**：创建问卷（仅登录用户），公开浏览，创建者查看统计
+- **问卷管理**：登录用户创建问卷，创建者查看结果统计
 - **四种题型**
   - 单选（single）
   - 多选（multiple，可限制最少/最多选择数量）
@@ -16,6 +16,7 @@
 - **必填 / 非必填**：每题可独立设置
 - **条件跳转**：根据选项跳转到指定题目或直接结束问卷
 - **填写控制**：问卷可设置是否允许匿名填写、是否允许同一人多次填写
+- **URL 发放**：问卷通过 `/survey/{id}` 链接分享，直接打开即可填写
 - **结果统计**：
   - 总体：总回答数、匿名/登录数、时间范围
   - 单选/多选：每项计数与占比，多选人均选择数
@@ -36,7 +37,7 @@
 | 认证         | python-jose（JWT）+ passlib[bcrypt]（bcrypt==4.0.1） |
 | 配置         | python-dotenv                                        |
 | 前端         | 原生 HTML + CSS + JavaScript（fetch）                |
-| 前端静态服务 | `npx serve`（端口 5000）                             |
+| 前端静态服务 | `npx serve`（端口 5000，含 rewrites）                |
 
 > 适配 Python 3.10。`bcrypt` 必须锁定在 `4.0.1`，否则与 `passlib 1.7.4` 不兼容。
 
@@ -57,7 +58,7 @@ survey-system/
 │   │   ├── routes/
 │   │   │   ├── __init__.py
 │   │   │   ├── auth_routes.py       # 注册 / 登录 / me
-│   │   │   ├── survey_routes.py     # 创建 / 我的 / 列表 / 详情
+│   │   │   ├── survey_routes.py     # 创建 / 我的 / 详情
 │   │   │   └── response_routes.py   # 提交回答 / 结果统计
 │   │   └── services/
 │   │       ├── __init__.py
@@ -70,11 +71,12 @@ survey-system/
 │   └── .env
 │
 └── frontend/
-    ├── index.html                   # 重定向到 survey.html
-    ├── survey.html                  # 问卷广场 + 填写弹窗
+    ├── serve.json                   # serve 的 rewrites 配置（URL 路由）
+    ├── index.html                   # 入口页（未登录自动弹登录框）
     ├── home.html                    # 个人主页（我创建的问卷）
     ├── create.html                  # 创建问卷（题目构建器）
-    ├── survey-detail.html           # 问卷详情 + 统计
+    ├── survey-view.html             # 问卷填写页（/survey/{id}）
+    ├── survey-detail.html           # 问卷详情 + 统计（/survey-detail/{id}）
     ├── css/
     │   └── style.css
     └── js/
@@ -101,7 +103,6 @@ survey-system/
 
 ```bash
 cd backend
-cp .env .env.bak   # 如已有 .env 可跳过
 ```
 
 `.env` 内容：
@@ -131,10 +132,12 @@ uvicorn app.main:app --reload --port 8000
 
 ```bash
 cd frontend
-npx serve -l 5000
+npx serve -l 5000 -c serve.json
 ```
 
-访问：`http://localhost:5000/survey.html`
+> 必须带 `-c serve.json`，URL 路由（`/survey/{id}`、`/survey-detail/{id}`）依赖其中的 rewrites 配置。**不要加 `-s`**。
+
+访问：`http://localhost:5000/`
 
 ### 5. （可选）写入测试数据
 
@@ -156,17 +159,49 @@ python seed_test_data.py
 
 ---
 
+## 🗺️ URL 路由
+
+问卷通过 URL 发放，前端用 `serve.json` 的 rewrites 把路径映射到静态页：
+
+```json
+{
+  "rewrites": [
+    { "source": "/survey-detail/*", "destination": "/survey-detail.html" },
+    { "source": "/survey-detail", "destination": "/survey-detail.html" },
+    { "source": "/survey/*", "destination": "/survey-view.html" },
+    { "source": "/survey", "destination": "/survey-view.html" }
+  ]
+}
+```
+
+| 访问路径              | 页面            | 说明                                       |
+| --------------------- | --------------- | ------------------------------------------ |
+| `/`                   | `index.html`    | 入口；未登录自动弹登录框，已登录跳个人主页 |
+| `/home.html`          | 个人主页        | 需登录                                     |
+| `/create.html`        | 创建问卷        | 需登录                                     |
+| `/survey/{id}`        | 填写问卷        | 问卷分享链接，直接打开填写                 |
+| `/survey`             | 填写页兜底      | 显示"缺少问卷 ID"                          |
+| `/survey-detail/{id}` | 问卷详情 + 统计 | 仅创建者，需登录                           |
+| `/survey-detail`      | 详情页兜底      | 显示"缺少问卷 ID"                          |
+
+> 页面内跳转与静态资源引用统一使用**根绝对路径**（如 `/survey-detail.html`、`/css/style.css`），避免相对路径受当前 URL 深度影响。
+
+---
+
 ## 🖥️ 使用流程
 
-1. **注册 / 登录**：打开 `survey.html`，点击右上角「登录 / 注册」。
+1. **注册 / 登录**：打开首页，自动弹登录框；或点击右上角「登录 / 注册」。
 2. **创建问卷**：登录后进入「创建问卷」页，添加题目、配置选项/校验/跳转，保存发布。
-3. **填写问卷**：在「问卷广场」选择问卷填写；支持跳转、逐题校验。
-4. **查看统计**：在「个人主页」点击「查看详情」进入统计页（仅创建者可看）。
-5. **退出登录**：右上角「退出」。
+3. **发放问卷**：在「个人主页」复制 `/survey/{id}` 链接分享给填写者。
+4. **填写问卷**：填写者打开链接即可填写；支持跳转、逐题校验。
+5. **查看统计**：创建者在「个人主页」点击「查看详情」进入 `/survey-detail/{id}` 看统计。
+6. **退出登录**：右上角「退出」。
 
 ---
 
 ## 🔌 API 概览
+
+> 认证方式：请求头 `Authorization: Bearer <token>`。完整文档运行后端后访问 `/docs`。
 
 | 方法 | 路径                       | 鉴权   | 说明             |
 | ---- | -------------------------- | ------ | ---------------- |
@@ -175,7 +210,6 @@ python seed_test_data.py
 | GET  | `/api/auth/me`             | 登录   | 当前用户信息     |
 | POST | `/api/surveys`             | 登录   | 创建问卷         |
 | GET  | `/api/surveys/mine`        | 登录   | 我创建的问卷     |
-| GET  | `/api/surveys`             | 公开   | 问卷列表         |
 | GET  | `/api/surveys/{id}`        | 可选   | 问卷详情         |
 | POST | `/api/surveys/{id}/submit` | 可选   | 提交回答         |
 | GET  | `/api/surveys/{id}/stats`  | 创建者 | 结果统计         |
@@ -342,11 +376,17 @@ cd backend
 python fix_ids.py
 ```
 
-### 4. 前端跨域失败
+### 4. `/survey/{id}` 或 `/survey-detail/{id}` 返回 404
+
+- 确认启动命令带 `-c serve.json`，且**没有** `-s`。
+- 确认 `serve.json` 位于 `frontend/` 根目录，内容为上文「URL 路由」一节所示（用 `*` 通配）。
+- 若修改 `serve.json` 后仍不生效，可尝试**重启 `npx serve`**（部分环境会缓存旧的 rewrites 配置）。
+
+### 5. 前端跨域失败
 
 后端 CORS 已允许 `http://localhost:5000` 与 `http://127.0.0.1:5000`。若前端用其他端口，请修改 `backend/app/main.py` 的 `allow_origins`。
 
-### 5. 前端请求后端地址
+### 6. 前端请求后端地址
 
 默认在 `frontend/js/api.js` 顶部：
 

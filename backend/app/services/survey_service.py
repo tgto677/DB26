@@ -104,27 +104,6 @@ def get_survey_or_404(survey_id: str) -> dict:
         raise HTTPException(status_code=404, detail="问卷不存在")
     return doc
 
-
-# def get_survey_detail(survey_id: str, current_user_id: str | None) -> dict:
-#     """
-#     获取问卷详情。
-#     - 未登录：只能看 allow_anonymous=True 的问卷，且不返回统计
-#     - 已登录且是创建者：返回完整 + 回答数
-#     - 已登录非创建者：只能看 allow_anonymous=True 的问卷
-#     """
-#     doc = get_survey_or_404(survey_id)
-#     is_creator = current_user_id is not None and doc["creator_id"] == current_user_id
-
-#     if not doc.get("allow_anonymous", True) and not is_creator:
-#         # 不允许匿名填写：非创建者不能访问
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="该问卷不允许匿名访问",
-#         )
-
-#     count = responses_collection.count_documents({"survey_id": doc["_id"]}) if is_creator else 0
-#     return survey_doc_to_out(doc, count)
-
 def _to_str_id(v) -> str | None:
     if v is None:
         return None
@@ -148,3 +127,15 @@ def get_survey_detail(survey_id: str, current_user_id: str | None) -> dict:
         if is_creator else 0
     )
     return survey_doc_to_out(doc, count)
+
+def delete_survey(survey_id: str, current_user_id: str) -> None:
+    """删除问卷及其所有回答。仅创建者可删。"""
+    doc = get_survey_or_404(survey_id)
+    if _to_str_id(doc.get("creator_id")) != _to_str_id(current_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有问卷创建者可以删除问卷",
+        )
+    # 先删回答，再删问卷
+    responses_collection.delete_many({"survey_id": doc["_id"]})
+    surveys_collection.delete_one({"_id": doc["_id"]})

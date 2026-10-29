@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>填写问卷</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar"></div>
+<div class="container">
+  <div id="viewRoot"><p class="muted">加载中…</p></div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/fill.js"></script>
+<script>
+// 从 /survey/{id} 中解析 id
+function parseSurveyId() {
+  const m = location.pathname.match(/^\/survey\/([^/]+)\/?$/);
+  if (m) return decodeURIComponent(m[1]);
+  return null; // /survey 或缺参
+}
+
+function renderMissingId() {
+  document.title = "缺少问卷 ID";
+  document.getElementById("viewRoot").innerHTML = `
+    <div class="card" style="text-align:center;padding:40px 20px;">
+      <h2>缺少问卷 ID</h2>
+      <p class="muted">请通过问卷链接访问，例如：<code>/survey/&lt;问卷ID&gt;</code></p>
+    </div>`;
+}
+
+function renderNotFound() {
+  document.title = "问卷不存在";
+  document.getElementById("viewRoot").innerHTML = `
+    <div class="card" style="text-align:center;padding:40px 20px;">
+      <h2>问卷不存在</h2>
+      <p class="muted">该问卷可能已被删除，或链接有误。</p>
+    </div>`;
+}
+
+function renderForbidden(detail) {
+  document.title = "无法访问";
+  document.getElementById("viewRoot").innerHTML = `
+    <div class="card" style="text-align:center;padding:40px 20px;">
+      <h2>无法访问该问卷</h2>
+      <p class="muted">${escapeHtml(detail || "该问卷不允许匿名访问，请登录后重试。")}</p>
+    </div>`;
+}
+
+async function loadSurveyView() {
+  const id = parseSurveyId();
+  if (!id) { renderMissingId(); return; }
+
+  try {
+    const survey = await api.getSurvey(id);
+    // 复用 fill.js：直接打开填写弹窗并展示问卷
+    document.title = survey.title || "填写问卷";
+    // 可选：先在页面里展示问卷标题/描述，再弹填写层
+    document.getElementById("viewRoot").innerHTML = `
+      <div class="card">
+        <h2>${escapeHtml(survey.title)}</h2>
+        <p class="muted">${escapeHtml(survey.description || "无描述")}</p>
+        <div>
+          <span class="badge">${survey.questions.length} 题</span>
+          <span class="badge gray">${survey.allow_anonymous ? "允许匿名" : "需登录"}</span>
+          <span class="badge gray">${survey.allow_multiple ? "可多次填写" : "限填一次"}</span>
+        </div>
+        <p style="margin-top:16px;">
+          <button class="btn btn-primary" onclick="openFillModal('${survey.id}')">开始填写</button>
+        </p>
+      </div>`;
+  } catch (e) {
+    if (e.status === 400) renderNotFound();
+    else if (e.status === 403) renderForbidden(e.detail);
+    else document.getElementById("viewRoot").innerHTML =
+      `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+renderNavbar("survey");
+loadSurveyView();
+</script>
+</body>
+</html>

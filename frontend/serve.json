@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/survey", "destination": "/survey-view.html" },
+    { "source": "/survey/:id", "destination": "/survey-view.html" },
+    { "source": "/survey-detail/:id", "destination": "/survey-detail.html" }
+  ]
+}

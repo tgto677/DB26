@@ -246,7 +246,7 @@ async function saveSurvey() {
   try {
     const created = await api.createSurvey(payload);
     alert("创建成功！");
-    location.href = `survey-detail.html?id=${created.id}`;
+    location.href = `/survey-detail/${created.id}`;
   } catch (e) {
     errEl.textContent = e.detail || "保存失败";
   }

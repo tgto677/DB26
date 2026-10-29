@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>问卷详情</title>
-<link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
 <div id="navbar"></div>
@@ -13,10 +13,12 @@
   <div id="content"><p class="muted">加载中…</p></div>
 </div>
 
-<script src="js/api.js"></script>
-<script src="js/common.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/common.js"></script>
 <script>
-const surveyId = new URLSearchParams(location.search).get("id");
+let surveyId = null;
+const m = location.pathname.match(/^\/survey-detail\/([^/]+)\/?$/);
+if (m) surveyId = decodeURIComponent(m[1]);
 
 function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -44,10 +46,22 @@ async function loadDetail() {
       </div>`;
 
     if (!isCreator) {
-      html += `<p class="muted">只有创建者可以查看统计。<a href="survey.html">去问卷广场填写</a></p>`;
+      html += `<p class="muted">只有创建者可以查看统计。${
+        survey.allow_anonymous ? `<a href="/survey/${surveyId}">去填写该问卷</a>` : ""
+      }</p>`;
       el.innerHTML = html;
       return;
     }
+
+    // 创建者管理区：删除问卷
+    html += `
+      <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h3 style="margin:0;">管理</h3>
+          <p class="muted" style="margin:4px 0 0;">删除后问卷及其全部回答将不可恢复。</p>
+        </div>
+        <button class="btn btn-danger" id="deleteSurveyBtn">删除问卷</button>
+      </div>`;
 
     const stats = await api.stats(surveyId);
     html += `
@@ -88,8 +102,26 @@ async function loadDetail() {
       html += `</div>`;
     }
     el.innerHTML = html;
+
+    // 绑定删除按钮（此时 DOM 已插入）
+    const delBtn = document.getElementById("deleteSurveyBtn");
+    if (delBtn) delBtn.addEventListener("click", () => confirmDeleteSurvey(surveyId));
   } catch (e) {
     el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+async function confirmDeleteSurvey(id) {
+  if (!confirm("确定删除该问卷吗？\n删除后问卷及其所有回答将不可恢复。")) return;
+  const btn = document.getElementById("deleteSurveyBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "删除中…"; }
+  try {
+    await api.deleteSurvey(id);
+    alert("问卷已删除");
+    location.href = "/home.html";
+  } catch (e) {
+    alert(e.detail || "删除失败");
+    if (btn) { btn.disabled = false; btn.textContent = "删除问卷"; }
   }
 }
 

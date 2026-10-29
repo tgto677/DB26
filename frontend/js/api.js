@@ -47,4 +47,5 @@ const api = {
   createSurvey: (payload) => request("/api/surveys", { method: "POST", body: payload, auth: true }),
   submit: (id, answers) => request(`/api/surveys/${id}/submit`, { method: "POST", body: { answers }, auth: !!getToken() }),
   stats: (id) => request(`/api/surveys/${id}/stats`, { auth: true }),
+  deleteSurvey: (id) => request(`/api/surveys/${id}`, { method: "DELETE", auth: true }),
 };

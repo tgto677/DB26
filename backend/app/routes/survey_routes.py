@@ -57,3 +57,12 @@ def get_survey_stats(
             detail="只有问卷创建者可以查看统计",
         )
     return stats_service.build_survey_stats(survey_doc)
+
+@router.delete("/{survey_id}", status_code=204)
+def delete_survey(
+    survey_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """删除问卷及其所有回答（仅创建者，需登录）。"""
+    survey_service.delete_survey(survey_id, str(current_user["_id"]))
+    return None

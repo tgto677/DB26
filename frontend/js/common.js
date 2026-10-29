@@ -3,7 +3,7 @@
 function requireLogin() {
     if (!getToken()) {
       alert("请先登录");
-      location.href = "survey.html";
+      location.href = "index.html";
       return false;
     }
     return true;
@@ -17,9 +17,8 @@ function requireLogin() {
       <div class="nav-inner">
         <div class="nav-brand">📋 问卷系统</div>
         <div class="nav-links">
-          <a href="survey.html" class="${active === 'survey' ? 'active' : ''}">问卷广场</a>
-          ${user ? `<a href="home.html" class="${active === 'home' ? 'active' : ''}">个人主页</a>` : ""}
-          ${user ? `<a href="create.html" class="${active === 'create' ? 'active' : ''}">创建问卷</a>` : ""}
+          ${user ? `<a href="/home.html" class="${active === 'home' ? 'active' : ''}">个人主页</a>` : ""}
+          ${user ? `<a href="/create.html" class="${active === 'create' ? 'active' : ''}">创建问卷</a>` : ""}
         </div>
         <div class="nav-user">
           ${
@@ -34,7 +33,7 @@ function requireLogin() {
   
   function logout() {
     clearAuth();
-    location.href = "survey.html";
+    location.href = "index.html";
   }
   
   // ---------- 登录注册弹窗 ----------

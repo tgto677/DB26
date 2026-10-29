@@ -1,2 +1,39 @@
 <!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta http-equiv="refresh" content="0;url=survey.html"></head><body></body></html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>问卷系统</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="navbar"></div>
+<div class="container">
+  <div class="card" style="text-align:center;padding:48px 20px;">
+    <h2 id="entryTitle">欢迎使用问卷系统</h2>
+    <p class="muted" id="entryDesc">请登录后创建和管理你的问卷。</p>
+    <p style="margin-top:20px;">
+      <button class="btn btn-primary" id="entryBtn" onclick="openAuthModal()">登录 / 注册</button>
+    </p>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script>
+// 已登录：直接进个人主页
+// 未登录：展示入口卡片，自动弹登录框
+renderNavbar("");
+
+if (getToken()) {
+  location.replace("home.html");
+} else {
+  // 自动弹出登录框，省一次点击
+  openAuthModal();
+  // 登录成功后 submitAuth 里会 reload 当前页，这里监听 token 变化后跳转
+  // 为兼容 common.js 的 location.reload() 行为，登录成功后 reload 会重新执行本脚本
+  // 此时 getToken() 为真 → 跳 home.html，形成闭环
+}
+</script>
+</body>
+</html>
