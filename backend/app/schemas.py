@@ -283,3 +283,55 @@ class SurveyStats(BaseModel):
     first_submitted_at: Optional[datetime] = None
     last_submitted_at: Optional[datetime] = None
     questions: list[Union[SingleStat, MultipleStat, TextStat, NumberStat]] = []
+
+
+# ---------- 跨问卷题目统计 ----------
+class BankOptionStat(BaseModel):
+    value: str
+    label: str
+    count: int
+    ratio: float
+
+
+class BankSingleStat(BaseModel):
+    type: Literal["single"] = "single"
+    options: list[BankOptionStat] = []
+
+
+class BankMultipleStat(BaseModel):
+    type: Literal["multiple"] = "multiple"
+    avg_selected: float = 0.0
+    options: list[BankOptionStat] = []
+
+
+class BankTextStat(BaseModel):
+    type: Literal["text"] = "text"
+    texts: list[str] = []
+
+
+class BankNumberStat(BaseModel):
+    type: Literal["number"] = "number"
+    min: Optional[float] = None
+    max: Optional[float] = None
+    avg: Optional[float] = None
+    median: Optional[float] = None
+    integer_count: int = 0
+    non_integer_count: int = 0
+
+
+class BankSurveyUsage(BaseModel):
+    survey_id: str
+    survey_title: str
+    response_count: int
+    answered: int
+
+
+class BankQuestionStats(BaseModel):
+    bank_id: str
+    name: str
+    question: Question
+    survey_count: int
+    total_responses: int
+    answered: int
+    stat: Union[BankSingleStat, BankMultipleStat, BankTextStat, BankNumberStat]
+    by_survey: list[BankSurveyUsage] = []

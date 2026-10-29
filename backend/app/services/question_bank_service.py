@@ -29,6 +29,88 @@ def _parse_oid(qid: str) -> ObjectId:
         return ObjectId(qid)
     except Exception:
         raise HTTPException(status_code=400, detail="无效的题目 id")
+    
+
+def _ratio(c: int, total: int) -> float:
+    return round(c / total, 4) if total else 0.0
+
+
+def _empty_stat(qtype: str, question: dict):
+    if qtype == "single":
+        return BankSingleStat(options=[])
+    if qtype == "multiple":
+        return BankMultipleStat(options=[])
+    if qtype == "text":
+        return BankTextStat(texts=[])
+    return BankNumberStat()
+
+
+def _aggregate_by_type(qtype: str, question: dict, values: list):
+    if qtype == "single":
+        # 以题目库当前 options 为基准，额外 value 追加
+        label_map = {o["value"]: o["label"] for o in question.get("options", [])}
+        counts: dict[str, int] = {v: 0 for v in label_map}
+        for v in values:
+            if isinstance(v, str):
+                counts[v] = counts.get(v, 0) + 1
+        total = len([v for v in values if isinstance(v, str)])
+        options = [
+            BankOptionStat(
+                value=v,
+                label=label_map.get(v, v),
+                count=counts[v],
+                ratio=_ratio(counts[v], total),
+            )
+            for v in counts
+        ]
+        return BankSingleStat(options=options)
+
+    if qtype == "multiple":
+        label_map = {o["value"]: o["label"] for o in question.get("options", [])}
+        counts: dict[str, int] = {v: 0 for v in label_map}
+        answered = 0
+        total_selected = 0
+        for v in values:
+            if isinstance(v, list):
+                answered += 1
+                for item in v:
+                    counts[item] = counts.get(item, 0) + 1
+                    total_selected += 1
+        options = [
+            BankOptionStat(
+                value=v,
+                label=label_map.get(v, v),
+                count=counts[v],
+                ratio=_ratio(counts[v], answered),
+            )
+            for v in counts
+        ]
+        avg = round(total_selected / answered, 2) if answered else 0.0
+        return BankMultipleStat(avg_selected=avg, options=options)
+
+    if qtype == "text":
+        texts = [str(v) for v in values if isinstance(v, str) and v.strip()]
+        return BankTextStat(texts=texts)
+
+    # number
+    nums = []
+    int_count = non_int_count = 0
+    for v in values:
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            continue
+        nums.append(float(v))
+        if float(v) == int(v):
+            int_count += 1
+        else:
+            non_int_count += 1
+    return BankNumberStat(
+        min=min(nums) if nums else None,
+        max=max(nums) if nums else None,
+        avg=round(mean(nums), 2) if nums else None,
+        median=round(float(median(nums)), 2) if nums else None,
+        integer_count=int_count,
+        non_integer_count=non_int_count,
+    )
 
 
 def create_question(owner_id: str, payload: QuestionBankCreate) -> dict:
@@ -368,3 +450,105 @@ def list_usages(qid: str, owner_id: str) -> list[dict]:
                     }
                 )
     return result
+
+
+from statistics import mean, median
+from ..database import responses_collection, surveys_collection
+from ..schemas import (
+    BankOptionStat, BankSingleStat, BankMultipleStat,
+    BankTextStat, BankNumberStat, BankSurveyUsage, BankQuestionStats,
+)
+
+
+def bank_question_stats(qid: str, owner_id: str) -> dict:
+    oid = _parse_oid(qid)
+    bank_doc = question_bank_collection.find_one({"_id": oid})
+    if not bank_doc:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    if _to_str_id(bank_doc.get("owner_id")) != _to_str_id(owner_id):
+        raise HTTPException(status_code=403, detail="只能查看自己题目的统计")
+
+    bank_id = str(oid)
+    bank_question = bank_doc["question"]
+    qtype = bank_question.get("type")
+
+    # 1. 找到所有使用该题的问卷（当前用户创建）
+    surveys = list(
+        surveys_collection.find({
+            "creator_id": _to_str_id(owner_id),
+            "questions.source_bank_id": bank_id,
+        })
+    )
+    survey_ids = [s["_id"] for s in surveys]
+    if not survey_ids:
+        # 没被使用：返回空统计
+        empty = _empty_stat(qtype, bank_question)
+        return BankQuestionStats(
+            bank_id=bank_id,
+            name=bank_doc.get("name") or bank_question.get("title", ""),
+            question=bank_question,
+            survey_count=0,
+            total_responses=0,
+            answered=0,
+            stat=empty,
+            by_survey=[],
+        ).model_dump()
+
+    # 2. 拉取这些问卷的回答
+    docs = list(responses_collection.find({"survey_id": {"$in": survey_ids}}))
+
+    # 每份问卷里，该题对应的 question_id 集合（可能多个）
+    qid_by_survey: dict[ObjectId, set[str]] = {}
+    for s in surveys:
+        s_qids = {
+            q["id"] for q in s.get("questions", [])
+            if q.get("source_bank_id") == bank_id
+        }
+        qid_by_survey[s["_id"]] = s_qids
+
+    # 3. 收集所有该题答案，并按问卷统计回答数
+    values: list = []
+    answered_per_survey: dict[ObjectId, int] = {sid: 0 for sid in survey_ids}
+    total_responses_per_survey: dict[ObjectId, int] = {sid: 0 for sid in survey_ids}
+
+    for d in docs:
+        sid = d["survey_id"]
+        if sid in total_responses_per_survey:
+            total_responses_per_survey[sid] += 1
+        s_qids = qid_by_survey.get(sid, set())
+        if not s_qids:
+            continue
+        got = False
+        for ans in d.get("answers", []):
+            if ans.get("question_id") in s_qids:
+                values.append(ans.get("value"))
+                got = True
+        if got:
+            answered_per_survey[sid] += 1
+
+    # 4. 按题型聚合
+    stat = _aggregate_by_type(qtype, bank_question, values)
+
+    # 5. 组装 by_survey
+    by_survey = []
+    title_map = {s["_id"]: s.get("title", "") for s in surveys}
+    for sid in survey_ids:
+        by_survey.append(BankSurveyUsage(
+            survey_id=str(sid),
+            survey_title=title_map.get(sid, ""),
+            response_count=total_responses_per_survey.get(sid, 0),
+            answered=answered_per_survey.get(sid, 0),
+        ))
+
+    total_responses = sum(total_responses_per_survey.values())
+
+    return BankQuestionStats(
+        bank_id=bank_id,
+        name=bank_doc.get("name") or bank_question.get("title", ""),
+        question=bank_question,
+        survey_count=len(surveys),
+        total_responses=total_responses,
+        answered=sum(answered_per_survey.values()),
+        stat=stat,
+        by_survey=by_survey,
+    ).model_dump()

@@ -84,6 +84,7 @@ async function loadList() {
                     ${item.shared_from ? "" : `<button class="btn btn-sm" onclick="shareItem('${item.id}')">分享</button>`}
                     <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}', this)">删除</button>
                     <button class="btn btn-sm" onclick="openUsages('${item.id}')">使用情况</button>
+                    <button class="btn btn-sm" onclick="openBankStats('${item.id}')">统计</button>
                 </div>
             </div>
             </div>`;
@@ -415,6 +416,67 @@ function closeUsages() {
   document.getElementById("usagesModal").classList.add("hidden");
 }
 
+async function openBankStats(id) {
+  document.getElementById("bankStatsModal").classList.remove("hidden");
+  const titleEl = document.getElementById("bankStatsTitle");
+  const body = document.getElementById("bankStatsBody");
+  titleEl.textContent = "题目统计";
+  body.innerHTML = `<p class="muted">加载中…</p>`;
+  try {
+    const d = await api.bankStats(id);
+    titleEl.textContent = `题目统计 · ${d.name}`;
+
+    let html = `
+      <div class="kpi-row">
+        <div class="kpi"><div class="num">${d.survey_count}</div><div class="lbl">使用问卷数</div></div>
+        <div class="kpi"><div class="num">${d.total_responses}</div><div class="lbl">总回答数</div></div>
+        <div class="kpi"><div class="num">${d.answered}</div><div class="lbl">该题回答数</div></div>
+      </div>`;
+
+    const stat = d.stat;
+    if (stat.type === "single" || stat.type === "multiple") {
+      if (stat.type === "multiple") {
+        html += `<p class="muted">人均选择 ${stat.avg_selected} 项</p>`;
+      }
+      for (const o of stat.options) {
+        html += `
+          <div class="stat-row"><span>${escapeHtml(o.label)}</span><span>${o.count}（${(o.ratio * 100).toFixed(1)}%）</span></div>
+          <div class="stat-bar"><div style="width:${(o.ratio * 100).toFixed(1)}%"></div></div>`;
+      }
+    } else if (stat.type === "text") {
+      if (!stat.texts.length) html += `<p class="muted">暂无文本回答</p>`;
+      else html += `<ul>${stat.texts.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>`;
+    } else if (stat.type === "number") {
+      html += `
+        <div class="kpi-row">
+          <div class="kpi"><div class="num">${stat.avg ?? "-"}</div><div class="lbl">平均值</div></div>
+          <div class="kpi"><div class="num">${stat.median ?? "-"}</div><div class="lbl">中位数</div></div>
+          <div class="kpi"><div class="num">${stat.min ?? "-"}</div><div class="lbl">最小值</div></div>
+          <div class="kpi"><div class="num">${stat.max ?? "-"}</div><div class="lbl">最大值</div></div>
+        </div>`;
+    }
+
+    if (d.by_survey && d.by_survey.length) {
+      html += `<h4 style="margin-top:16px;">各问卷贡献</h4>`;
+      for (const s of d.by_survey) {
+        html += `
+          <div class="stat-row">
+            <span>${escapeHtml(s.survey_title)}</span>
+            <span>该题 ${s.answered} / 总 ${s.response_count}</span>
+          </div>`;
+      }
+    }
+
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+function closeBankStats() {
+  document.getElementById("bankStatsModal").classList.add("hidden");
+}
+
 if (requireLogin()) {
   renderNavbar("bank");
   loadList();
@@ -450,6 +512,15 @@ if (requireLogin()) {
       <div id="usagesList"><p class="muted">加载中…</p></div>
       <div class="modal-actions">
         <button class="btn" onclick="closeUsages()">关闭</button>
+      </div>
+    </div>
+  </div>
+  <div id="bankStatsModal" class="modal-mask hidden">
+    <div class="modal" style="max-width:680px;">
+      <h3 id="bankStatsTitle">题目统计</h3>
+      <div id="bankStatsBody"><p class="muted">加载中…</p></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeBankStats()">关闭</button>
       </div>
     </div>
   </div>

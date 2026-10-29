@@ -9,7 +9,8 @@ from ..schemas import (
     QuestionBankHistoryDetail,
     QuestionShareRequest,
     QuestionCopyRequest,
-    QuestionUsageItem
+    QuestionUsageItem,
+    BankQuestionStats
 )
 from ..services import question_bank_service
 
@@ -116,3 +117,12 @@ def list_usages(
 ):
     """查看该题目被哪些问卷使用（仅所有者）。"""
     return question_bank_service.list_usages(qid, str(current_user["_id"]))
+
+
+@router.get("/{qid}/stats", response_model=BankQuestionStats)
+def bank_question_stats(
+    qid: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """跨问卷聚合该题目的统计结果（仅所有者）。"""
+    return question_bank_service.bank_question_stats(qid, str(current_user["_id"]))
