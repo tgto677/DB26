@@ -1,93 +1,50 @@
-# 在线问卷系统（Online Survey System）
+# 在线问卷系统 V2 — README
 
-一个基于 **FastAPI + MongoDB + 原生 HTML/JS** 的轻量级在线问卷系统。支持四种题型、条件跳转、匿名与重复填写控制，并提供结果统计。问卷通过 URL 分享发放，无需问卷广场。
-
----
-
-## ✨ 功能特性
-
-- **用户认证**：注册 / 登录，JWT 鉴权，密码 bcrypt 哈希存储
-- **问卷管理**：登录用户创建问卷，创建者查看结果统计
-- **四种题型**
-  - 单选（single）
-  - 多选（multiple，可限制最少/最多选择数量）
-  - 文本填空（text，可限制字数）
-  - 数字填空（number，可限制范围、是否仅整数）
-- **必填 / 非必填**：每题可独立设置
-- **条件跳转**：根据选项跳转到指定题目或直接结束问卷
-- **填写控制**：问卷可设置是否允许匿名填写、是否允许同一人多次填写
-- **URL 发放**：问卷通过 `/survey/{id}` 链接分享，直接打开即可填写
-- **结果统计**：
-  - 总体：总回答数、匿名/登录数、时间范围
-  - 单选/多选：每项计数与占比，多选人均选择数
-  - 文本：全部回答原文
-  - 数字：最小值/最大值/平均值/中位数、整数占比
-- **前后端一致的跳转引擎**：前端实时计算路径，后端提交时复核
+> 本版本在 V1（问卷创建/填写/统计）基础上，围绕**题目复用与治理**做了功能更新。启动方式与 V1 兼容。
 
 ---
 
-## 🧱 技术栈
+## 一、V2 功能更新（相对 V1）
 
-| 层           | 技术                                                 |
-| ------------ | ---------------------------------------------------- |
-| 后端框架     | FastAPI 0.115                                        |
-| 数据库驱动   | pymongo 4.8                                          |
-| 数据库       | MongoDB                                              |
-| 数据校验     | Pydantic 2.9                                         |
-| 认证         | python-jose（JWT）+ passlib[bcrypt]（bcrypt==4.0.1） |
-| 配置         | python-dotenv                                        |
-| 前端         | 原生 HTML + CSS + JavaScript（fetch）                |
-| 前端静态服务 | `npx serve`（端口 5000，含 rewrites）                |
+V1 已具备：用户注册登录、问卷创建（单选/多选/文本/数字、必填、数量/长度/范围约束、条件跳转、匿名与多次填写控制）、URL 发放填写、创建者结果统计。
 
-> 适配 Python 3.10。`bcrypt` 必须锁定在 `4.0.1`，否则与 `passlib 1.7.4` 不兼容。
+V2 新增以下能力：
 
----
+### 1. 题目库（保存与复用）
 
-## 📁 项目结构
+- 创建问卷时，可把某道题**存入"我的题目库"**。
+- 新增独立页面**题目库**（`/question-bank.html`），查看、编辑、删除已保存的题目。
+- 创建问卷时可通过**"从题目库添加"**插入已保存题目（插入时自动重新生成题目 id、清空跳转规则）。
 
-```
-survey-system/
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── config.py                # 读取 .env 配置
-│   │   ├── database.py              # MongoClient、集合、索引初始化
-│   │   ├── auth.py                  # 密码哈希、JWT、鉴权依赖
-│   │   ├── schemas.py               # Pydantic 模型（用户/题目/问卷/提交/统计）
-│   │   ├── main.py                  # FastAPI 入口、CORS、路由注册
-│   │   ├── routes/
-│   │   │   ├── __init__.py
-│   │   │   ├── auth_routes.py       # 注册 / 登录 / me
-│   │   │   ├── survey_routes.py     # 创建 / 我的 / 详情
-│   │   │   └── response_routes.py   # 提交回答 / 结果统计
-│   │   └── services/
-│   │       ├── __init__.py
-│   │       ├── survey_service.py    # 问卷业务逻辑
-│   │       ├── response_service.py  # 提交校验 + 跳转引擎
-│   │       └── stats_service.py     # 统计聚合
-│   ├── seed_test_data.py            # 生成测试数据
-│   ├── fix_ids.py                   # ID 类型迁移脚本
-│   ├── requirements.txt
-│   └── .env
-│
-└── frontend/
-    ├── serve.json                   # serve 的 rewrites 配置（URL 路由）
-    ├── index.html                   # 入口页（未登录自动弹登录框）
-    ├── home.html                    # 个人主页（我创建的问卷）
-    ├── create.html                  # 创建问卷（题目构建器）
-    ├── survey-view.html             # 问卷填写页（/survey/{id}）
-    ├── survey-detail.html           # 问卷详情 + 统计（/survey-detail/{id}）
-    ├── css/
-    │   └── style.css
-    └── js/
-        ├── api.js                   # API 封装、token 存取
-        ├── common.js                # 导航栏、登录注册弹窗、登录守卫
-        └── fill.js                  # 填写弹窗 + 前端跳转引擎
-```
+### 2. 分享题目给其他用户
+
+- 题目库中的题可**分享给指定用户名**。
+- 分享采用**复制式**：对方题目库中出现一份独立副本，标注"来自 xx"。
+- 副本归接收者所有，可独立修改/删除，不影响分享者原题。
+
+### 3. 修改题目 + 历史版本 + 恢复
+
+- 题目库中的题可**编辑**（标题、题型、选项、必填、数量/长度/范围/整数等）。
+- 每次修改前自动保存旧版本到历史，**可查看历史版本列表与某版本完整内容**。
+- 可**恢复**到任意历史版本；恢复本身也记一条历史，支持再撤销。
+
+### 4. 复制为新题目（多版本并存）
+
+- 可把某道题**复制为新题目**，原题与副本同时存在。
+- 副本独立演进（有自己的版本历史），可单独插入问卷。
+- 副本标注"复制题"，与跨用户分享的"来自 xx"区分。
+
+### 5. 查看使用情况与跨问卷统计
+
+- 可查看某道题**被哪些问卷使用**（问卷标题、创建时间、回答数、题号）。
+- 可**跨问卷聚合该题的统计结果**：按选项 value 合并计数与占比，文本合并原文，数字输出最小值/最大值/平均值/中位数，并列出各问卷贡献。
+- 关联方式：从题目库插入题目时，问卷题目会记录 `source_bank_id`，用于反查与统计。
+
+> V1 已有问卷与题目库旧数据在 V2 下保持兼容：缺少新字段时读取端按默认值处理，无需数据迁移。
 
 ---
 
-## 🚀 快速开始
+## 二、项目启动方式
 
 ### 环境要求
 
@@ -97,15 +54,15 @@ survey-system/
 
 ### 1. 启动 MongoDB
 
-确保 MongoDB 已运行，默认监听 `27017`。
+确保 MongoDB 已运行。
 
-### 2. 配置后端
+### 2. 配置并启动后端
 
 ```bash
 cd backend
 ```
 
-`.env` 内容：
+`.env`：
 
 ```env
 MONGO_URI=mongodb://localhost:27017
@@ -115,283 +72,96 @@ JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ```
 
-> **重要**：生产环境务必把 `JWT_SECRET` 换成随机字符串。
-
-### 3. 安装依赖并启动后端
+安装依赖并启动：
 
 ```bash
-cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
 - 健康检查：`http://localhost:8000/api/health`
-- 接口文档（Swagger）：`http://localhost:8000/docs`
+- 接口文档：`http://localhost:8000/docs`
 
-### 4. 启动前端
+> `requirements.txt` 中已锁定 `bcrypt==4.0.1`，以兼容 `passlib 1.7.4` 与 Python 3.10。
+
+### 3. 启动前端
 
 ```bash
 cd frontend
 npx serve -l 5000 -c serve.json
 ```
 
-> 必须带 `-c serve.json`，URL 路由（`/survey/{id}`、`/survey-detail/{id}`）依赖其中的 rewrites 配置。**不要加 `-s`**。
+> 必须带 `-c serve.json`（其中含 `/survey/{id}`、`/survey-detail/{id}` 的 rewrites 配置），且**不要加 `-s`**。
 
 访问：`http://localhost:5000/`
 
-### 5. （可选）写入测试数据
+### 4. （可选）写入测试数据
 
 ```bash
 cd backend
 python seed_test_data.py
 ```
 
-会清空 `users` / `surveys` / `responses` 三个集合并写入：
+会清空 `users` / `surveys` / `responses` 三个集合并写入测试用户、问卷与回答（**仅测试环境使用**）。
 
-- **4 个用户**（密码均为 `123456`）：`alice`、`bob`、`carol`、`dave`
-- **5 份问卷**，覆盖四种题型、跳转、匿名/多次等场景
-- **约 24 条回答**，用于统计页演示
+> 新增的 `question_bank`、`question_bank_history` 集合无需手动初始化，首次写入时自动创建，索引在后端启动时由 `init_db()` 建立。
 
-> 若历史数据 ID 类型不一致（ObjectId 与字符串混用），运行：
-> ```bash
-> python fix_ids.py
-> ```
-
----
-
-## 🗺️ URL 路由
-
-问卷通过 URL 发放，前端用 `serve.json` 的 rewrites 把路径映射到静态页：
-
-```json
-{
-  "rewrites": [
-    { "source": "/survey-detail/*", "destination": "/survey-detail.html" },
-    { "source": "/survey-detail", "destination": "/survey-detail.html" },
-    { "source": "/survey/*", "destination": "/survey-view.html" },
-    { "source": "/survey", "destination": "/survey-view.html" }
-  ]
-}
-```
-
-| 访问路径              | 页面            | 说明                                       |
-| --------------------- | --------------- | ------------------------------------------ |
-| `/`                   | `index.html`    | 入口；未登录自动弹登录框，已登录跳个人主页 |
-| `/home.html`          | 个人主页        | 需登录                                     |
-| `/create.html`        | 创建问卷        | 需登录                                     |
-| `/survey/{id}`        | 填写问卷        | 问卷分享链接，直接打开填写                 |
-| `/survey`             | 填写页兜底      | 显示"缺少问卷 ID"                          |
-| `/survey-detail/{id}` | 问卷详情 + 统计 | 仅创建者，需登录                           |
-| `/survey-detail`      | 详情页兜底      | 显示"缺少问卷 ID"                          |
-
-> 页面内跳转与静态资源引用统一使用**根绝对路径**（如 `/survey-detail.html`、`/css/style.css`），避免相对路径受当前 URL 深度影响。
-
----
-
-## 🖥️ 使用流程
-
-1. **注册 / 登录**：打开首页，自动弹登录框；或点击右上角「登录 / 注册」。
-2. **创建问卷**：登录后进入「创建问卷」页，添加题目、配置选项/校验/跳转，保存发布。
-3. **发放问卷**：在「个人主页」复制 `/survey/{id}` 链接分享给填写者。
-4. **填写问卷**：填写者打开链接即可填写；支持跳转、逐题校验。
-5. **查看统计**：创建者在「个人主页」点击「查看详情」进入 `/survey-detail/{id}` 看统计。
-6. **退出登录**：右上角「退出」。
-
----
-
-## 🔌 API 概览
-
-> 认证方式：请求头 `Authorization: Bearer <token>`。完整文档运行后端后访问 `/docs`。
-
-| 方法 | 路径                       | 鉴权   | 说明             |
-| ---- | -------------------------- | ------ | ---------------- |
-| POST | `/api/auth/register`       | 公开   | 注册并返回 token |
-| POST | `/api/auth/login`          | 公开   | JSON 登录        |
-| GET  | `/api/auth/me`             | 登录   | 当前用户信息     |
-| POST | `/api/surveys`             | 登录   | 创建问卷         |
-| GET  | `/api/surveys/mine`        | 登录   | 我创建的问卷     |
-| GET  | `/api/surveys/{id}`        | 可选   | 问卷详情         |
-| POST | `/api/surveys/{id}/submit` | 可选   | 提交回答         |
-| GET  | `/api/surveys/{id}/stats`  | 创建者 | 结果统计         |
-
-### 快速示例
-
-```bash
-# 注册
-curl -X POST http://localhost:8000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"alice","password":"123456"}'
-
-# 登录
-curl -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"alice","password":"123456"}'
-
-# 创建问卷（带 token）
-curl -X POST http://localhost:8000/api/surveys \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{
-    "title": "满意度调查",
-    "allow_anonymous": true,
-    "allow_multiple": false,
-    "questions": [{
-      "id": "q1", "type": "single", "title": "满意吗？",
-      "required": true,
-      "options": [{"label":"满意","value":"yes"},{"label":"不满意","value":"no"}],
-      "jump_rules": []
-    }]
-  }'
-
-# 匿名提交
-curl -X POST http://localhost:8000/api/surveys/<survey_id>/submit \
-  -H "Content-Type: application/json" \
-  -d '{"answers":[{"question_id":"q1","value":"yes"}]}'
-
-# 查看统计（创建者）
-curl http://localhost:8000/api/surveys/<survey_id>/stats \
-  -H "Authorization: Bearer <token>"
-```
-
----
-
-## 🗄️ 数据模型
-
-### users
-
-```json
-{
-  "_id": "ObjectId",
-  "username": "alice",
-  "password_hash": "bcrypt hash",
-  "created_at": "ISODate"
-}
-```
-
-索引：`username`（唯一）。
-
-### surveys
-
-```json
-{
-  "_id": "ObjectId",
-  "creator_id": "字符串 user id",
-  "title": "标题",
-  "description": "描述",
-  "allow_anonymous": true,
-  "allow_multiple": false,
-  "questions": [ /* 题目数组 */ ],
-  "created_at": "ISODate",
-  "updated_at": "ISODate"
-}
-```
-
-索引：`creator_id`、`created_at`。
-
-**题目结构**（按 `type` 区分）：
-
-```json
-// 单选
-{ "id": "q1", "type": "single", "title": "...", "required": true,
-  "options": [{"label":"满意","value":"yes"}],
-  "jump_rules": [{"option_value":"no","target_question_id":"q3"}] }
-
-// 多选
-{ "id": "q2", "type": "multiple", "title": "...", "required": false,
-  "options": [...], "min_choices": 1, "max_choices": 2, "jump_rules": [] }
-
-// 文本
-{ "id": "q3", "type": "text", "title": "...", "required": false,
-  "min_length": 0, "max_length": 200, "jump_rules": [] }
-
-// 数字
-{ "id": "q4", "type": "number", "title": "...", "required": true,
-  "min_value": 1, "max_value": 10, "integer_only": true, "jump_rules": [] }
-```
-
-**跳转规则**：`target_question_id` 为 `null` 表示结束问卷；按顺序匹配，命中即跳。
-
-### responses
-
-```json
-{
-  "_id": "ObjectId",
-  "survey_id": "ObjectId",
-  "user_id": "字符串 user id | null",
-  "is_anonymous": false,
-  "answers": [
-    { "question_id": "q1", "value": "yes" },
-    { "question_id": "q2", "value": ["ui", "speed"] },
-    { "question_id": "q4", "value": 8 }
-  ],
-  "submitted_at": "ISODate"
-}
-```
-
-索引：`survey_id`、`submitted_at`。
-
-> 只存实际被访问到的题目；被跳转跳过的不写入，因此统计中"该题回答人数"可能小于总回答数。
-
----
-
-## ✅ 校验设计
-
-校验分四层：
-
-1. **Pydantic 结构校验**（创建时）：题目 id 唯一、跳转目标存在、多选数量关系、文本/数字范围关系 → 422
-2. **业务规则校验**：用户名唯一、问卷存在、权限（创建者/匿名访问）、匿名与重复提交约束 → 403/404/409
-3. **提交时按路径校验**：先算跳转路径，只校验被访问到的题；各题型按选项/数量/长度/范围校验 → 400
-4. **前端即时校验**：逐题校验，提升体验；后端始终复核
-
----
-
-## ⚠️ 常见问题
-
-### 1. `bcrypt` 与 `passlib` 不兼容
-
-确保 `bcrypt==4.0.1`（已在 `requirements.txt` 中锁定）。验证：
-
-```bash
-python -c "import bcrypt; print(bcrypt.__version__)"
-```
-
-### 2. 启动种子数据报 `E11000 duplicate key ... email_1`
-
-`users` 集合存在遗留的唯一索引 `email_1`。删除它：
-
-```javascript
-// mongosh
-use survey_db
-db.users.dropIndex("email_1")
-```
-
-`seed_test_data.py` 已内置清理逻辑。
-
-### 3. 登录后个人主页为空 / 非匿名问卷打不开
-
-通常是 `creator_id` / `user_id` 的 ObjectId 与字符串类型不一致。运行迁移：
+### 5. 若历史数据 ID 类型不一致
 
 ```bash
 cd backend
 python fix_ids.py
 ```
 
-### 4. `/survey/{id}` 或 `/survey-detail/{id}` 返回 404
+---
 
-- 确认启动命令带 `-c serve.json`，且**没有** `-s`。
-- 确认 `serve.json` 位于 `frontend/` 根目录，内容为上文「URL 路由」一节所示（用 `*` 通配）。
-- 若修改 `serve.json` 后仍不生效，可尝试**重启 `npx serve`**（部分环境会缓存旧的 rewrites 配置）。
+## 三、页面与路由
 
-### 5. 前端跨域失败
+| 路径                  | 页面                  | 说明                                        |
+| --------------------- | --------------------- | ------------------------------------------- |
+| `/`                   | 入口                  | 未登录自动弹登录框，已登录跳个人主页        |
+| `/home.html`          | 个人主页              | 我创建的问卷                                |
+| `/create.html`        | 创建问卷              | 题目构建器，含"存入题目库""从题目库添加"    |
+| `/question-bank.html` | **题目库（V2 新增）** | 查看/编辑/复制/分享/历史/恢复/使用情况/统计 |
+| `/survey/{id}`        | 填写问卷              | 问卷分享链接                                |
+| `/survey-detail/{id}` | 问卷详情 + 统计       | 仅创建者，需登录                            |
 
-后端 CORS 已允许 `http://localhost:5000` 与 `http://127.0.0.1:5000`。若前端用其他端口，请修改 `backend/app/main.py` 的 `allow_origins`。
+---
 
-### 6. 前端请求后端地址
+## 四、数据集合
 
-默认在 `frontend/js/api.js` 顶部：
+| 集合                    | 说明                                    |
+| ----------------------- | --------------------------------------- |
+| `users`                 | 用户                                    |
+| `surveys`               | 问卷（题目结构含可选 `source_bank_id`） |
+| `responses`             | 回答                                    |
+| `question_bank`         | **V2 新增**：题目库                     |
+| `question_bank_history` | **V2 新增**：题目库版本历史             |
 
-```javascript
-const API_BASE = "http://localhost:8000";
-```
+---
 
-如需修改后端地址，改这里即可。
+## 五、注意事项
+
+1. **已发布问卷的题目不可原地修改**；如需改题，可通过"复制为新题目/复制问卷"派生后在新对象中修改。
+2. **分享与复制均为独立副本**：删除原题不影响副本，修改副本不影响原题。
+3. **跨问卷统计按选项 value 聚合**：若某问卷中该题选项被改过，额外 value 会以自身为标签追加展示，回答不丢失。
+4. **权限**：题目库的增删改查、分享、历史、恢复、使用情况与统计均按 `owner_id` 隔离，非所有者返回 403。
+5. **`seed_test_data.py` 会清空三个集合**，请勿在生产库运行。
+
+---
+
+## 六、V2 新增接口一览
+
+| 方法   | 路径                                        | 说明               |
+| ------ | ------------------------------------------- | ------------------ |
+| POST   | `/api/question-bank`                        | 保存题目           |
+| GET    | `/api/question-bank`                        | 我的题目库         |
+| DELETE | `/api/question-bank/{id}`                   | 删除题目           |
+| PUT    | `/api/question-bank/{id}`                   | 修改题目（记历史） |
+| GET    | `/api/question-bank/{id}/history`           | 历史列表           |
+| GET    | `/api/question-bank/{id}/history/{version}` | 历史版本详情       |
+| POST   | `/api/question-bank/{id}/restore/{version}` | 恢复旧版本         |
+| POST   | `/api/question-bank/{id}/share`             | 分享给其他用户     |
+| POST   | `/api/question-bank/{id}/copy`              | 复制为新题目       |
+| GET    | `/api/question-bank/{id}/usages`            | 被哪些问卷使用     |
+| GET    | `/api/question-bank/{id}/stats`             | 跨问卷题目统计     |
