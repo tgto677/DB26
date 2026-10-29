@@ -59,21 +59,30 @@ async function loadList() {
       return;
     }
     el.innerHTML = list.map((item) => {
-      const q = item.question;
-      return `
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
-            <div style="flex:1;">
-              <h3 style="margin:0 0 6px;">${escapeHtml(item.name || q.title)}</h3>
-              <div>${questionSummary(q)}</div>
-              ${q.type === "single" || q.type === "multiple" ? `
-                <ul style="margin:10px 0 0;color:#555;font-size:14px;">
-                  ${q.options.map((o) => `<li>${escapeHtml(o.label)}</li>`).join("")}
-                </ul>` : ""}
+        const q = item.question;
+        const sharedBadge = item.shared_from
+            ? `<span class="badge gray">来自 ${escapeHtml(item.shared_from_username || "其他用户")}</span>`
+            : "";
+        return `
+            <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+                <div style="flex:1;">
+                <h3 style="margin:0 0 6px;">${escapeHtml(item.name || q.title)}</h3>
+                <div>
+                    ${sharedBadge}
+                    ${questionSummary(q)}
+                </div>
+                ${q.type === "single" || q.type === "multiple" ? `
+                    <ul style="margin:10px 0 0;color:#555;font-size:14px;">
+                    ${q.options.map((o) => `<li>${escapeHtml(o.label)}</li>`).join("")}
+                    </ul>` : ""}
+                </div>
+                <div style="display:flex;gap:8px;">
+                ${item.shared_from ? "" : `<button class="btn btn-sm" onclick="shareItem('${item.id}')">分享</button>`}
+                <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}', this)">删除</button>
+                </div>
             </div>
-            <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}', this)">删除</button>
-          </div>
-        </div>`;
+            </div>`;
     }).join("");
   } catch (e) {
     el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
@@ -89,6 +98,17 @@ async function removeItem(id, btn) {
   } catch (e) {
     alert(e.detail || "删除失败");
     btn.disabled = false;
+  }
+}
+
+async function shareItem(id) {
+  const username = prompt("输入要分享给的用户名：");
+  if (!username || !username.trim()) return;
+  try {
+    await api.shareBank(id, username.trim());
+    alert(`已分享给 ${username.trim()}`);
+  } catch (e) {
+    alert(e.detail || "分享失败");
   }
 }
 

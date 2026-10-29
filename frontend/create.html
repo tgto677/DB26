@@ -316,6 +316,9 @@ async function openBankPicker() {
     }
     el.innerHTML = bankCache.map((item) => {
       const q = item.question;
+      const fromLabel = item.shared_from
+        ? ` · 来自 ${escapeHtml(item.shared_from_username || "其他用户")}`
+        : "";
       return `
         <div class="card" style="margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -323,7 +326,7 @@ async function openBankPicker() {
               <strong>${escapeHtml(item.name || q.title)}</strong>
               <div class="muted" style="margin-top:4px;">
                 ${({single:"单选",multiple:"多选",text:"文本填空",number:"数字填空"})[q.type] || q.type}
-                ${q.required ? " · 必填" : ""}
+                ${q.required ? " · 必填" : ""}${fromLabel}
               </div>
             </div>
             <button class="btn btn-primary btn-sm" onclick="insertFromBank('${item.id}')">插入</button>

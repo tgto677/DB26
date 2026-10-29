@@ -139,3 +139,26 @@ def delete_survey(survey_id: str, current_user_id: str) -> None:
     # 先删回答，再删问卷
     responses_collection.delete_many({"survey_id": doc["_id"]})
     surveys_collection.delete_one({"_id": doc["_id"]})
+
+def duplicate_survey(survey_id: str, current_user_id: str) -> dict:
+    """复制问卷为新问卷（不复制回答）。仅创建者可复制。"""
+    src = get_survey_or_404(survey_id)
+    if _to_str_id(src.get("creator_id")) != _to_str_id(current_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只能复制自己创建的问卷",
+        )
+    now = _now()
+    doc = {
+        "creator_id": current_user_id,
+        "title": f"{src['title']}（副本）"[:200],
+        "description": src.get("description", ""),
+        "allow_anonymous": src.get("allow_anonymous", True),
+        "allow_multiple": src.get("allow_multiple", False),
+        "questions": src.get("questions", []),
+        "created_at": now,
+        "updated_at": now,
+    }
+    result = surveys_collection.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return survey_doc_to_out(doc)

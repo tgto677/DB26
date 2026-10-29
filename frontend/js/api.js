@@ -52,4 +52,6 @@ const api = {
   listBank: () => request("/api/question-bank", { auth: true }),
   saveBank: (question, name) => request("/api/question-bank", { method: "POST", body: { question, name }, auth: true }),
   deleteBank: (id) => request(`/api/question-bank/${id}`, { method: "DELETE", auth: true }),
+  shareBank: (id, username) => request(`/api/question-bank/${id}/share`, { method: "POST", body: { username }, auth: true }),
+  duplicateSurvey: (id) => request(`/api/surveys/${id}/duplicate`, { method: "POST", auth: true }),
 };

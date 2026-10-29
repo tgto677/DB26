@@ -114,8 +114,15 @@ class QuestionBankOut(BaseModel):
     owner_id: str
     question: Question
     name: str
+    shared_from: Optional[str] = None
+    shared_from_username: Optional[str] = None
+    shared_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+class QuestionShareRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=30)
 
 
 # ---------- 问卷 ----------

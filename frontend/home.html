@@ -43,12 +43,25 @@ async function loadMine() {
             <span class="badge gray">${s.allow_multiple ? "可多次填写" : "限填一次"}</span>
           </div>
         </div>
-        <div>
+        <div style="display:flex;gap:8px;">
           <a class="btn" href="/survey-detail/${s.id}">查看详情</a>
+          <button class="btn btn-sm" onclick="duplicateFromHome('${s.id}', this)">复制</button>
         </div>
       </div>`).join("");
   } catch (e) {
     el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+async function duplicateFromHome(id, btn) {
+  if (!confirm("复制为新问卷（不含回答）？")) return;
+  btn.disabled = true;
+  try {
+    const created = await api.duplicateSurvey(id);
+    alert("已复制");
+    location.href = `/survey-detail/${created.id}`;
+  } catch (e) {
+    alert(e.detail || "复制失败");
+    btn.disabled = false;
   }
 }
 if (requireLogin()) {

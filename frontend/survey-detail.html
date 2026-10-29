@@ -58,9 +58,14 @@ async function loadDetail() {
       <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
         <div>
           <h3 style="margin:0;">管理</h3>
-          <p class="muted" style="margin:4px 0 0;">删除后问卷及其全部回答将不可恢复。</p>
+          <p class="muted" style="margin:4px 0 0;">
+            已发布问卷的题目不可修改。如需改题，请复制为新问卷后在新问卷中修改。
+          </p>
         </div>
-        <button class="btn btn-danger" id="deleteSurveyBtn">删除问卷</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" id="duplicateSurveyBtn">复制为新问卷</button>
+          <button class="btn btn-danger" id="deleteSurveyBtn">删除问卷</button>
+        </div>
       </div>`;
 
     const stats = await api.stats(surveyId);
@@ -102,6 +107,8 @@ async function loadDetail() {
       html += `</div>`;
     }
     el.innerHTML = html;
+    const dupBtn = document.getElementById("duplicateSurveyBtn");
+    if (dupBtn) dupBtn.addEventListener("click", () => duplicateSurvey(surveyId));
 
     // 绑定删除按钮（此时 DOM 已插入）
     const delBtn = document.getElementById("deleteSurveyBtn");
@@ -122,6 +129,20 @@ async function confirmDeleteSurvey(id) {
   } catch (e) {
     alert(e.detail || "删除失败");
     if (btn) { btn.disabled = false; btn.textContent = "删除问卷"; }
+  }
+}
+
+async function duplicateSurvey(id) {
+  if (!confirm("将复制该问卷的题目与配置为新问卷（不含回答）。\n复制后可在新问卷中修改题目。是否继续？")) return;
+  const btn = document.getElementById("duplicateSurveyBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "复制中…"; }
+  try {
+    const created = await api.duplicateSurvey(id);
+    alert("已复制为新问卷");
+    location.href = `/survey-detail/${created.id}`;
+  } catch (e) {
+    alert(e.detail || "复制失败");
+    if (btn) { btn.disabled = false; btn.textContent = "复制为新问卷"; }
   }
 }
 
