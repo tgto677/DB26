@@ -355,6 +355,18 @@ async function restoreHistory(version) {
   }
 }
 
+async function copyItem(id) {
+  const name = prompt("新题目名称（可留空，默认追加“（副本）”）", "");
+  if (name === null) return; // 取消
+  try {
+    await api.copyBank(id, name.trim() || null);
+    alert("已复制为新题目");
+    loadList();
+  } catch (e) {
+    alert(e.detail || "复制失败");
+  }
+}
+
 if (requireLogin()) {
   renderNavbar("bank");
   loadList();
