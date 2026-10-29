@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from bson import ObjectId
 from fastapi import HTTPException, status
 
 from ..database import question_bank_collection, question_bank_history_collection, users_collection
-from ..schemas import QuestionBankCreate, QuestionBankUpdate
+from ..schemas import QuestionBankCreate, QuestionBankUpdate, QuestionCopyRequest
 
 
 def _save_history(question_oid, owner_id, question, name, action, version):
@@ -62,6 +63,7 @@ def bank_doc_to_out(doc: dict) -> dict:
         "created_at": doc.get("created_at"),
         "updated_at": doc.get("updated_at"),
         "current_version": doc.get("current_version", 1),
+        "copied_from": _to_str_id(doc.get("copied_from")),
     }
 
 
@@ -286,3 +288,32 @@ def restore_version(qid: str, owner_id: str, version: int) -> dict:
     )
     updated = question_bank_collection.find_one({"_id": oid})
     return bank_doc_to_out(updated)
+
+
+def copy_question(qid: str, owner_id: str, payload: Optional[QuestionCopyRequest] = None) -> dict:
+    """把题目库中的某题复制为一道新题目（同一所有者），副本与原题并存。"""
+    oid = _parse_oid(qid)
+    src = question_bank_collection.find_one({"_id": oid})
+    if not src:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    if _to_str_id(src.get("owner_id")) != _to_str_id(owner_id):
+        raise HTTPException(status_code=403, detail="只能复制自己的题目")
+
+    base_name = src.get("name") or src["question"].get("title", "")
+    new_name = (payload.name.strip() if payload and payload.name and payload.name.strip()
+                else f"{base_name}（副本）")
+
+    now = _now()
+    doc = {
+        "owner_id": _to_str_id(owner_id),
+        "question": src["question"],
+        "name": new_name,
+        "current_version": 1,
+        "copied_from": _to_str_id(src["_id"]),
+        "created_at": now,
+        "updated_at": now,
+    }
+    result = question_bank_collection.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    _save_history(result.inserted_id, owner_id, src["question"], new_name, "create", 1)
+    return bank_doc_to_out(doc)

@@ -8,6 +8,7 @@ from ..schemas import (
     QuestionBankHistoryItem,
     QuestionBankHistoryDetail,
     QuestionShareRequest,
+    QuestionCopyRequest
 )
 from ..services import question_bank_service
 
@@ -93,4 +94,15 @@ def restore_version(
     """恢复到指定历史版本（仅所有者）。恢复前也会记录当前版本。"""
     return question_bank_service.restore_version(
         qid, str(current_user["_id"]), version
+    )
+
+@router.post("/{qid}/copy", response_model=QuestionBankOut, status_code=201)
+def copy_question(
+    qid: str,
+    payload: QuestionCopyRequest | None = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """复制题目为新题目（仅所有者）。副本与原题并存，可独立修改。"""
+    return question_bank_service.copy_question(
+        qid, str(current_user["_id"]), payload
     )

@@ -77,8 +77,9 @@ async function loadList() {
                     ${q.options.map((o) => `<li>${escapeHtml(o.label)}</li>`).join("")}
                     </ul>` : ""}
                 </div>
-                <div style="display:flex;gap:8px;">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
                     <button class="btn btn-sm" onclick="editItem('${item.id}')">编辑</button>
+                    <button class="btn btn-sm" onclick="copyItem('${item.id}')">复制</button>
                     <button class="btn btn-sm" onclick="openHistory('${item.id}')">历史</button>
                     ${item.shared_from ? "" : `<button class="btn btn-sm" onclick="shareItem('${item.id}')">分享</button>`}
                     <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}', this)">删除</button>

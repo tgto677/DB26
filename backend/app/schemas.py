@@ -115,6 +115,7 @@ class QuestionBankOut(BaseModel):
     question: Question
     name: str
     current_version: int = 1
+    copied_from: Optional[str] = None
     shared_from: Optional[str] = None
     shared_from_username: Optional[str] = None
     shared_at: Optional[datetime] = None
@@ -124,6 +125,10 @@ class QuestionBankOut(BaseModel):
 
 class QuestionShareRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=30)
+
+
+class QuestionCopyRequest(BaseModel):
+    name: Optional[str] = None
 
 
 # ---------- 题目库修改与历史 ----------
