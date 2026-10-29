@@ -1,707 +1,360 @@
-# 问卷系统 API 接口文档
+# 在线问卷系统（Online Survey System）
 
-> Base URL：`http://localhost:8000`
-> 认证方式：JWT Bearer Token（除公开接口外，请求头需带 `Authorization: Bearer <token>`）
-> 数据格式：JSON（`Content-Type: application/json`）
-> 统一错误格式：`{"detail": "错误描述"}`
+一个基于 **FastAPI + MongoDB + 原生 HTML/JS** 的轻量级在线问卷系统。支持四种题型、条件跳转、匿名与重复填写控制，并提供结果统计。
 
 ---
 
-## 目录
+## ✨ 功能特性
 
-1. [通用说明](#1-通用说明)
-2. [认证接口](#2-认证接口)
-3. [问卷接口](#3-问卷接口)
-4. [回答与统计接口](#4-回答与统计接口)
-5. [数据结构](#5-数据结构)
-6. [错误码](#6-错误码)
-
----
-
-## 1. 通用说明
-
-### 1.1 认证
-
-登录/注册成功后返回 `access_token`，后续受保护接口在请求头携带：
-
-```
-Authorization: Bearer <access_token>
-```
-
-Token 有效期由 `.env` 的 `ACCESS_TOKEN_EXPIRE_MINUTES` 控制（默认 1440 分钟）。
-
-### 1.2 鉴权级别标记
-
-本文档用以下标记说明接口鉴权要求：
-
-| 标记     | 含义                                              |
-| -------- | ------------------------------------------------- |
-| 🟢 公开   | 无需 token                                        |
-| 🟡 可选   | 带 token 会识别用户身份，不带也可访问（行为不同） |
-| 🔴 登录   | 必须带有效 token，否则 401                        |
-| 🔴 创建者 | 必须登录且是该问卷的创建者，否则 403              |
-
-### 1.3 ID 约定
-
-- 问卷 `id`、用户 `id` 均为字符串形式的 MongoDB ObjectId。
-- `creator_id`、`user_id` 在接口返回中统一为**字符串**。
+- **用户认证**：注册 / 登录，JWT 鉴权，密码 bcrypt 哈希存储
+- **问卷管理**：创建问卷（仅登录用户），公开浏览，创建者查看统计
+- **四种题型**
+  - 单选（single）
+  - 多选（multiple，可限制最少/最多选择数量）
+  - 文本填空（text，可限制字数）
+  - 数字填空（number，可限制范围、是否仅整数）
+- **必填 / 非必填**：每题可独立设置
+- **条件跳转**：根据选项跳转到指定题目或直接结束问卷
+- **填写控制**：问卷可设置是否允许匿名填写、是否允许同一人多次填写
+- **结果统计**：
+  - 总体：总回答数、匿名/登录数、时间范围
+  - 单选/多选：每项计数与占比，多选人均选择数
+  - 文本：全部回答原文
+  - 数字：最小值/最大值/平均值/中位数、整数占比
+- **前后端一致的跳转引擎**：前端实时计算路径，后端提交时复核
 
 ---
 
-## 2. 认证接口
+## 🧱 技术栈
 
-### 2.1 注册
+| 层           | 技术                                                 |
+| ------------ | ---------------------------------------------------- |
+| 后端框架     | FastAPI 0.115                                        |
+| 数据库驱动   | pymongo 4.8                                          |
+| 数据库       | MongoDB                                              |
+| 数据校验     | Pydantic 2.9                                         |
+| 认证         | python-jose（JWT）+ passlib[bcrypt]（bcrypt==4.0.1） |
+| 配置         | python-dotenv                                        |
+| 前端         | 原生 HTML + CSS + JavaScript（fetch）                |
+| 前端静态服务 | `npx serve`（端口 5000）                             |
 
-- **路径**：`POST /api/auth/register`
-- **鉴权**：🟢 公开
-- **说明**：创建用户并直接返回 token。
-
-**请求体**
-
-| 字段     | 类型   | 必填 | 约束                |
-| -------- | ------ | ---- | ------------------- |
-| username | string | 是   | 3~30 字符，全局唯一 |
-| password | string | 是   | 6~128 字符          |
-
-```json
-{
-  "username": "alice",
-  "password": "123456"
-}
-```
-
-**成功响应** `201`
-
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer",
-  "user": {
-    "id": "6701a2f3e4b0c1234567890a",
-    "username": "alice",
-    "created_at": "2026-10-22T08:00:00Z"
-  }
-}
-```
-
-**错误**
-
-| 状态码 | 场景           |
-| ------ | -------------- |
-| 409    | 用户名已被占用 |
-| 422    | 参数校验失败   |
+> 适配 Python 3.10。`bcrypt` 必须锁定在 `4.0.1`，否则与 `passlib 1.7.4` 不兼容。
 
 ---
 
-### 2.2 登录（JSON）
+## 📁 项目结构
 
-- **路径**：`POST /api/auth/login`
-- **鉴权**：🟢 公开
-
-**请求体**
-
-```json
-{
-  "username": "alice",
-  "password": "123456"
-}
 ```
-
-**成功响应** `200`
-
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer",
-  "user": {
-    "id": "6701a2f3e4b0c1234567890a",
-    "username": "alice",
-    "created_at": "2026-10-22T08:00:00Z"
-  }
-}
-```
-
-**错误**
-
-| 状态码 | 场景             |
-| ------ | ---------------- |
-| 401    | 用户名或密码错误 |
-
----
-
-### 2.3 登录（表单，供 Swagger 使用）
-
-- **路径**：`POST /api/auth/login/form`
-- **鉴权**：🟢 公开
-- **说明**：`application/x-www-form-urlencoded`，字段 `username`、`password`。仅用于 Swagger 的 Authorize 按钮，前端不调用，文档中隐藏。
-
-**成功响应** `200`：同 2.2
-
----
-
-### 2.4 获取当前用户
-
-- **路径**：`GET /api/auth/me`
-- **鉴权**：🔴 登录
-
-**成功响应** `200`
-
-```json
-{
-  "id": "6701a2f3e4b0c1234567890a",
-  "username": "alice",
-  "created_at": "2026-10-22T08:00:00Z"
-}
-```
-
-**错误**
-
-| 状态码 | 场景                               |
-| ------ | ---------------------------------- |
-| 401    | token 缺失/无效/过期，或用户不存在 |
-
----
-
-## 3. 问卷接口
-
-### 3.1 创建问卷
-
-- **路径**：`POST /api/surveys`
-- **鉴权**：🔴 登录
-- **说明**：创建一份问卷，`creator_id` 自动取当前用户。
-
-**请求体**
-
-| 字段            | 类型              | 必填 | 说明                     |
-| --------------- | ----------------- | ---- | ------------------------ |
-| title           | string            | 是   | 1~200 字符               |
-| description     | string            | 否   | 默认空                   |
-| allow_anonymous | bool              | 否   | 默认 `true`              |
-| allow_multiple  | bool              | 否   | 默认 `false`             |
-| questions       | array\<Question\> | 是   | 至少 1 题，`id` 不能重复 |
-
-**Question 结构**（见 [5.1](#51-question-题目)），按 `type` 区分：
-
-```json
-{
-  "title": "产品满意度调查",
-  "description": "约 1 分钟完成",
-  "allow_anonymous": true,
-  "allow_multiple": false,
-  "questions": [
-    {
-      "id": "q1",
-      "type": "single",
-      "title": "你对产品整体满意吗？",
-      "required": true,
-      "options": [
-        { "label": "满意", "value": "yes" },
-        { "label": "不满意", "value": "no" }
-      ],
-      "jump_rules": [
-        { "option_value": "yes", "target_question_id": "q2" },
-        { "option_value": "no", "target_question_id": null }
-      ]
-    },
-    {
-      "id": "q2",
-      "type": "multiple",
-      "title": "你喜欢哪些方面？",
-      "required": false,
-      "options": [
-        { "label": "界面", "value": "ui" },
-        { "label": "速度", "value": "speed" },
-        { "label": "功能", "value": "feature" }
-      ],
-      "min_choices": 1,
-      "max_choices": 2,
-      "jump_rules": []
-    },
-    {
-      "id": "q3",
-      "type": "text",
-      "title": "你的建议",
-      "required": false,
-      "min_length": 0,
-      "max_length": 200,
-      "jump_rules": []
-    },
-    {
-      "id": "q4",
-      "type": "number",
-      "title": "打分（1-10 整数）",
-      "required": true,
-      "min_value": 1,
-      "max_value": 10,
-      "integer_only": true,
-      "jump_rules": []
-    }
-  ]
-}
-```
-
-**成功响应** `201`：返回 `Survey` 对象（见 [5.2](#52-survey-问卷)）。
-
-**错误**
-
-| 状态码 | 场景                                                         |
-| ------ | ------------------------------------------------------------ |
-| 401    | 未登录                                                       |
-| 422    | 字段校验失败（如题目 id 重复、`max_choices < min_choices`、跳转目标不存在、数字范围非法等） |
-
----
-
-### 3.2 我创建的问卷
-
-- **路径**：`GET /api/surveys/mine`
-- **鉴权**：🔴 登录
-- **说明**：返回当前用户创建的所有问卷，按 `created_at` 倒序。
-
-**成功响应** `200`：`Survey[]`
-
----
-
-### 3.3 问卷列表（公开）
-
-- **路径**：`GET /api/surveys`
-- **鉴权**：🟢 公开
-- **说明**：返回所有问卷，按 `created_at` 倒序，附 `response_count`（回答数）。
-
-**成功响应** `200`：`Survey[]`
-
----
-
-### 3.4 问卷详情
-
-- **路径**：`GET /api/surveys/{survey_id}`
-- **鉴权**：🟡 可选
-- **说明**：
-  - 匿名问卷（`allow_anonymous=true`）：任何人可访问。
-  - 非匿名问卷（`allow_anonymous=false`）：仅创建者可访问，其他人 403。
-  - 创建者访问时 `response_count` 为真实回答数，其他人恒为 0。
-
-**路径参数**
-
-| 参数      | 类型   | 说明          |
-| --------- | ------ | ------------- |
-| survey_id | string | 问卷 ObjectId |
-
-**成功响应** `200`：`Survey`
-
-**错误**
-
-| 状态码 | 场景                                         |
-| ------ | -------------------------------------------- |
-| 400    | survey_id 格式非法                           |
-| 403    | 非匿名问卷，且当前用户不是创建者（含未登录） |
-| 404    | 问卷不存在                                   |
-
----
-
-## 4. 回答与统计接口
-
-### 4.1 提交回答
-
-- **路径**：`POST /api/surveys/{survey_id}/submit`
-- **鉴权**：🟡 可选（是否必须登录由问卷 `allow_anonymous` 决定）
-- **说明**：
-  - 服务端按 `jump_rules` 计算实际访问路径，**只校验被访问到的题目**，被跳过的必填题不报错。
-  - 匿名字段 `user_id` 为 `null`，`is_anonymous=true`。
-  - 校验：必填、选项合法性、多选数量、文本长度、数字范围/整数。
-
-**请求体**
-
-| 字段    | 类型                | 说明                        |
-| ------- | ------------------- | --------------------------- |
-| answers | array\<AnswerItem\> | `{question_id, value}` 列表 |
-
-`value` 按题型：
-
-| 题型     | value 类型                           |
-| -------- | ------------------------------------ |
-| single   | string（选项 value）                 |
-| multiple | string[]（选项 value 数组）          |
-| text     | string                               |
-| number   | number（可传数字字符串，服务端转换） |
-
-```json
-{
-  "answers": [
-    { "question_id": "q1", "value": "no" },
-    { "question_id": "q3", "value": "希望加载更快" },
-    { "question_id": "q4", "value": 4 }
-  ]
-}
-```
-
-**成功响应** `200`
-
-```json
-{
-  "message": "提交成功",
-  "response_id": "6701b2f3e4b0c1234567890b"
-}
-```
-
-**错误**
-
-| 状态码 | 场景                                                 |
-| ------ | ---------------------------------------------------- |
-| 400    | 必填未答、选项非法、数量/长度/范围越界、跳转规则循环 |
-| 403    | 问卷不允许匿名但未登录；或不允许重复但未登录         |
-| 404    | 问卷不存在                                           |
-| 409    | 不允许重复提交，且当前用户已提交过                   |
-
----
-
-### 4.2 问卷结果统计
-
-- **路径**：`GET /api/surveys/{survey_id}/stats`
-- **鉴权**：🔴 创建者
-- **说明**：返回总体统计 + 逐题统计。逐题统计的"回答人数"可能小于总回答数（因跳转跳过）。
-
-**成功响应** `200`：`SurveyStats`（见 [5.3](#53-surveystats-统计)）
-
-```json
-{
-  "survey_id": "6701a2f3e4b0c1234567890a",
-  "title": "产品满意度调查",
-  "total_responses": 10,
-  "anonymous_count": 4,
-  "logged_in_count": 6,
-  "first_submitted_at": "2026-10-20T08:00:00Z",
-  "last_submitted_at": "2026-10-22T09:30:00Z",
-  "questions": [
-    {
-      "question_id": "q1",
-      "title": "你对产品整体满意吗？",
-      "type": "single",
-      "answered": 10,
-      "options": [
-        { "value": "yes", "label": "满意", "count": 7, "ratio": 0.7 },
-        { "value": "no", "label": "不满意", "count": 3, "ratio": 0.3 }
-      ]
-    },
-    {
-      "question_id": "q2",
-      "title": "你喜欢哪些方面？",
-      "type": "multiple",
-      "answered": 3,
-      "avg_selected": 1.67,
-      "options": [
-        { "value": "ui", "label": "界面", "count": 2, "ratio": 0.6667 },
-        { "value": "speed", "label": "速度", "count": 1, "ratio": 0.3333 },
-        { "value": "feature", "label": "功能", "count": 2, "ratio": 0.6667 }
-      ]
-    },
-    {
-      "question_id": "q3",
-      "title": "你的建议",
-      "type": "text",
-      "answered": 4,
-      "texts": ["希望加载更快", "整体不错"]
-    },
-    {
-      "question_id": "q4",
-      "title": "打分（1-10 整数）",
-      "type": "number",
-      "answered": 10,
-      "min": 4,
-      "max": 10,
-      "avg": 7.2,
-      "median": 7,
-      "integer_count": 10,
-      "non_integer_count": 0
-    }
-  ]
-}
-```
-
-**错误**
-
-| 状态码 | 场景                     |
-| ------ | ------------------------ |
-| 401    | 未登录                   |
-| 403    | 当前用户不是该问卷创建者 |
-| 404    | 问卷不存在               |
-
----
-
-## 5. 数据结构
-
-### 5.1 Question（题目）
-
-按 `type` 分为四种，公共字段：
-
-| 字段       | 类型       | 说明                                      |
-| ---------- | ---------- | ----------------------------------------- |
-| id         | string     | 题目唯一 id（问卷内唯一）                 |
-| type       | string     | `single` / `multiple` / `text` / `number` |
-| title      | string     | 题目标题                                  |
-| required   | bool       | 是否必填，默认 `false`                    |
-| jump_rules | JumpRule[] | 跳转规则，默认 `[]`                       |
-
-#### single（单选）
-
-```json
-{
-  "id": "q1",
-  "type": "single",
-  "title": "题目",
-  "required": true,
-  "options": [{ "label": "选项A", "value": "a" }],
-  "jump_rules": [{ "option_value": "a", "target_question_id": "q3" }]
-}
-```
-
-| 字段    | 类型             | 说明                        |
-| ------- | ---------------- | --------------------------- |
-| options | QuestionOption[] | 至少 1 个，`value` 题内唯一 |
-
-#### multiple（多选）
-
-```json
-{
-  "id": "q2",
-  "type": "multiple",
-  "title": "题目",
-  "required": false,
-  "options": [{ "label": "A", "value": "a" }],
-  "min_choices": 1,
-  "max_choices": 3,
-  "jump_rules": []
-}
-```
-
-| 字段        | 类型             | 说明                                                         |
-| ----------- | ---------------- | ------------------------------------------------------------ |
-| options     | QuestionOption[] | 至少 1 个                                                    |
-| min_choices | int              | 最少选择数，默认 0                                           |
-| max_choices | int \| null      | 最多选择数，`null` 不限；不得小于 `min_choices`，不得大于选项数 |
-
-#### text（文本填空）
-
-```json
-{
-  "id": "q3",
-  "type": "text",
-  "title": "题目",
-  "required": false,
-  "min_length": 0,
-  "max_length": 200,
-  "jump_rules": []
-}
-```
-
-| 字段       | 类型        | 说明                                         |
-| ---------- | ----------- | -------------------------------------------- |
-| min_length | int         | 最少字数，默认 0                             |
-| max_length | int \| null | 最多字数，`null` 不限；不得小于 `min_length` |
-
-#### number（数字填空）
-
-```json
-{
-  "id": "q4",
-  "type": "number",
-  "title": "题目",
-  "required": true,
-  "min_value": 1,
-  "max_value": 10,
-  "integer_only": true,
-  "jump_rules": []
-}
-```
-
-| 字段         | 类型           | 说明                                      |
-| ------------ | -------------- | ----------------------------------------- |
-| min_value    | number \| null | 最小值，`null` 不限                       |
-| max_value    | number \| null | 最大值，`null` 不限；不得小于 `min_value` |
-| integer_only | bool           | 是否仅允许整数，默认 `false`              |
-
-#### JumpRule（跳转规则）
-
-```json
-{ "option_value": "no", "target_question_id": "q3" }
-```
-
-| 字段               | 类型           | 说明                                                       |
-| ------------------ | -------------- | ---------------------------------------------------------- |
-| option_value       | string         | 触发值：单选/多选按选项 `value` 匹配（多选为"包含即触发"） |
-| target_question_id | string \| null | 跳转目标题 id；`null` 表示结束问卷                         |
-
-**执行规则**：按题目顺序遍历，对每道已访问的题按 `jump_rules` 顺序匹配，命中即跳转；未命中则进入下一题。
-
----
-
-### 5.2 Survey（问卷）
-
-```json
-{
-  "id": "6701a2f3e4b0c1234567890a",
-  "title": "产品满意度调查",
-  "description": "约 1 分钟完成",
-  "allow_anonymous": true,
-  "allow_multiple": false,
-  "questions": [ /* Question[] */ ],
-  "creator_id": "6701a2f3e4b0c1234567890b",
-  "created_at": "2026-10-20T08:00:00Z",
-  "updated_at": "2026-10-20T08:00:00Z",
-  "response_count": 10
-}
-```
-
-| 字段            | 类型       | 说明                             |
-| --------------- | ---------- | -------------------------------- |
-| id              | string     | 问卷 id                          |
-| title           | string     | 标题                             |
-| description     | string     | 描述                             |
-| allow_anonymous | bool       | 是否允许匿名填写                 |
-| allow_multiple  | bool       | 是否允许同一人多次填写           |
-| questions       | Question[] | 题目列表                         |
-| creator_id      | string     | 创建者用户 id                    |
-| created_at      | datetime   | 创建时间（UTC）                  |
-| updated_at      | datetime   | 更新时间（UTC）                  |
-| response_count  | int        | 回答数；非创建者查看详情时恒为 0 |
-
----
-
-### 5.3 SurveyStats（统计）
-
-```json
-{
-  "survey_id": "string",
-  "title": "string",
-  "total_responses": 10,
-  "anonymous_count": 4,
-  "logged_in_count": 6,
-  "first_submitted_at": "datetime | null",
-  "last_submitted_at": "datetime | null",
-  "questions": [ /* 见下 */ ]
-}
-```
-
-#### SingleStat
-
-| 字段        | 类型         | 说明                 |
-| ----------- | ------------ | -------------------- |
-| question_id | string       |                      |
-| title       | string       |                      |
-| type        | `"single"`   |                      |
-| answered    | int          | 回答该题人数         |
-| options     | OptionStat[] | 每个选项的计数与占比 |
-
-#### MultipleStat
-
-| 字段         | 类型         | 说明                                      |
-| ------------ | ------------ | ----------------------------------------- |
-| question_id  | string       |                                           |
-| title        | string       |                                           |
-| type         | `"multiple"` |                                           |
-| answered     | int          | 回答该题人数                              |
-| avg_selected | float        | 人均选择项数                              |
-| options      | OptionStat[] | 每个选项被选次数与占比（分母 = answered） |
-
-#### TextStat
-
-| 字段        | 类型     | 说明                 |
-| ----------- | -------- | -------------------- |
-| question_id | string   |                      |
-| title       | string   |                      |
-| type        | `"text"` |                      |
-| answered    | int      |                      |
-| texts       | string[] | 全部非空文本回答原文 |
-
-#### NumberStat
-
-| 字段              | 类型           | 说明            |
-| ----------------- | -------------- | --------------- |
-| question_id       | string         |                 |
-| title             | string         |                 |
-| type              | `"number"`     |                 |
-| answered          | int            |                 |
-| min / max         | number \| null | 最小值 / 最大值 |
-| avg / median      | number \| null | 平均值 / 中位数 |
-| integer_count     | int            | 整数回答数      |
-| non_integer_count | int            | 非整数回答数    |
-
-#### OptionStat
-
-| 字段  | 类型   | 说明                   |
-| ----- | ------ | ---------------------- |
-| value | string | 选项值                 |
-| label | string | 选项文字               |
-| count | int    | 被选次数               |
-| ratio | float  | 占比（0~1，保留 4 位） |
-
----
-
-## 6. 错误码
-
-| 状态码 | 含义         | 常见场景                                                     |
-| ------ | ------------ | ------------------------------------------------------------ |
-| 200    | 成功         |                                                              |
-| 201    | 创建成功     | 注册、创建问卷                                               |
-| 400    | 请求错误     | 问卷 id 格式非法；回答校验失败；跳转循环                     |
-| 401    | 未认证       | token 缺失/无效/过期；用户名或密码错误                       |
-| 403    | 无权限       | 非创建者看统计；非匿名问卷非创建者访问；匿名提交受限         |
-| 404    | 资源不存在   | 问卷不存在                                                   |
-| 409    | 冲突         | 用户名已存在；重复提交                                       |
-| 422    | 参数校验失败 | 请求体字段类型/约束不符（FastAPI/Pydantic 自动返回，`detail` 为数组） |
-
-**401 响应示例**
-
-```json
-{ "detail": "无效或过期的凭证" }
-```
-
-**422 响应示例**
-
-```json
-{
-  "detail": [
-    {
-      "type": "value_error",
-      "loc": ["body", "questions", 0],
-      "msg": "Value error, max_choices 不能小于 min_choices",
-      "input": { "...": "..." }
-    }
-  ]
-}
+survey-system/
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── config.py                # 读取 .env 配置
+│   │   ├── database.py              # MongoClient、集合、索引初始化
+│   │   ├── auth.py                  # 密码哈希、JWT、鉴权依赖
+│   │   ├── schemas.py               # Pydantic 模型（用户/题目/问卷/提交/统计）
+│   │   ├── main.py                  # FastAPI 入口、CORS、路由注册
+│   │   ├── routes/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth_routes.py       # 注册 / 登录 / me
+│   │   │   ├── survey_routes.py     # 创建 / 我的 / 列表 / 详情
+│   │   │   └── response_routes.py   # 提交回答 / 结果统计
+│   │   └── services/
+│   │       ├── __init__.py
+│   │       ├── survey_service.py    # 问卷业务逻辑
+│   │       ├── response_service.py  # 提交校验 + 跳转引擎
+│   │       └── stats_service.py     # 统计聚合
+│   ├── seed_test_data.py            # 生成测试数据
+│   ├── fix_ids.py                   # ID 类型迁移脚本
+│   ├── requirements.txt
+│   └── .env
+│
+└── frontend/
+    ├── index.html                   # 重定向到 survey.html
+    ├── survey.html                  # 问卷广场 + 填写弹窗
+    ├── home.html                    # 个人主页（我创建的问卷）
+    ├── create.html                  # 创建问卷（题目构建器）
+    ├── survey-detail.html           # 问卷详情 + 统计
+    ├── css/
+    │   └── style.css
+    └── js/
+        ├── api.js                   # API 封装、token 存取
+        ├── common.js                # 导航栏、登录注册弹窗、登录守卫
+        └── fill.js                  # 填写弹窗 + 前端跳转引擎
 ```
 
 ---
 
-## 附录：快速示例（curl）
+## 🚀 快速开始
 
-**注册并保存 token**
+### 环境要求
+
+- Python 3.10+
+- MongoDB（本地默认 `mongodb://localhost:27017`）
+- Node.js（用于 `npx serve`）
+
+### 1. 启动 MongoDB
+
+确保 MongoDB 已运行，默认监听 `27017`。
+
+### 2. 配置后端
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/register \
+cd backend
+cp .env .env.bak   # 如已有 .env 可跳过
+```
+
+`.env` 内容：
+
+```env
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB_NAME=survey_db
+JWT_SECRET=change-me-to-a-random-secret
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+```
+
+> **重要**：生产环境务必把 `JWT_SECRET` 换成随机字符串。
+
+### 3. 安装依赖并启动后端
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+- 健康检查：`http://localhost:8000/api/health`
+- 接口文档（Swagger）：`http://localhost:8000/docs`
+
+### 4. 启动前端
+
+```bash
+cd frontend
+npx serve -l 5000
+```
+
+访问：`http://localhost:5000/survey.html`
+
+### 5. （可选）写入测试数据
+
+```bash
+cd backend
+python seed_test_data.py
+```
+
+会清空 `users` / `surveys` / `responses` 三个集合并写入：
+
+- **4 个用户**（密码均为 `123456`）：`alice`、`bob`、`carol`、`dave`
+- **5 份问卷**，覆盖四种题型、跳转、匿名/多次等场景
+- **约 24 条回答**，用于统计页演示
+
+> 若历史数据 ID 类型不一致（ObjectId 与字符串混用），运行：
+> ```bash
+> python fix_ids.py
+> ```
+
+---
+
+## 🖥️ 使用流程
+
+1. **注册 / 登录**：打开 `survey.html`，点击右上角「登录 / 注册」。
+2. **创建问卷**：登录后进入「创建问卷」页，添加题目、配置选项/校验/跳转，保存发布。
+3. **填写问卷**：在「问卷广场」选择问卷填写；支持跳转、逐题校验。
+4. **查看统计**：在「个人主页」点击「查看详情」进入统计页（仅创建者可看）。
+5. **退出登录**：右上角「退出」。
+
+---
+
+## 🔌 API 概览
+
+> 完整文档见 [`API.md`](./API.md) 或运行后端后访问 `/docs`。
+> 认证方式：请求头 `Authorization: Bearer <token>`。
+
+| 方法 | 路径                       | 鉴权   | 说明             |
+| ---- | -------------------------- | ------ | ---------------- |
+| POST | `/api/auth/register`       | 公开   | 注册并返回 token |
+| POST | `/api/auth/login`          | 公开   | JSON 登录        |
+| GET  | `/api/auth/me`             | 登录   | 当前用户信息     |
+| POST | `/api/surveys`             | 登录   | 创建问卷         |
+| GET  | `/api/surveys/mine`        | 登录   | 我创建的问卷     |
+| GET  | `/api/surveys`             | 公开   | 问卷列表         |
+| GET  | `/api/surveys/{id}`        | 可选   | 问卷详情         |
+| POST | `/api/surveys/{id}/submit` | 可选   | 提交回答         |
+| GET  | `/api/surveys/{id}/stats`  | 创建者 | 结果统计         |
+
+### 快速示例
+
+```bash
+# 注册
+curl -X POST http://localhost:8000/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username":"alice","password":"123456"}' | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
-```
+  -d '{"username":"alice","password":"123456"}'
 
-**创建问卷**
+# 登录
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"123456"}'
 
-```bash
+# 创建问卷（带 token）
 curl -X POST http://localhost:8000/api/surveys \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"title":"测试问卷","allow_anonymous":true,"allow_multiple":false,"questions":[{"id":"q1","type":"single","title":"满意吗？","required":true,"options":[{"label":"满意","value":"yes"},{"label":"不满意","value":"no"}],"jump_rules":[]}]}'
-```
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "title": "满意度调查",
+    "allow_anonymous": true,
+    "allow_multiple": false,
+    "questions": [{
+      "id": "q1", "type": "single", "title": "满意吗？",
+      "required": true,
+      "options": [{"label":"满意","value":"yes"},{"label":"不满意","value":"no"}],
+      "jump_rules": []
+    }]
+  }'
 
-**匿名提交**
-
-```bash
+# 匿名提交
 curl -X POST http://localhost:8000/api/surveys/<survey_id>/submit \
   -H "Content-Type: application/json" \
   -d '{"answers":[{"question_id":"q1","value":"yes"}]}'
+
+# 查看统计（创建者）
+curl http://localhost:8000/api/surveys/<survey_id>/stats \
+  -H "Authorization: Bearer <token>"
 ```
 
-**查看统计（创建者）**
+---
+
+## 🗄️ 数据模型
+
+### users
+
+```json
+{
+  "_id": "ObjectId",
+  "username": "alice",
+  "password_hash": "bcrypt hash",
+  "created_at": "ISODate"
+}
+```
+
+索引：`username`（唯一）。
+
+### surveys
+
+```json
+{
+  "_id": "ObjectId",
+  "creator_id": "字符串 user id",
+  "title": "标题",
+  "description": "描述",
+  "allow_anonymous": true,
+  "allow_multiple": false,
+  "questions": [ /* 题目数组 */ ],
+  "created_at": "ISODate",
+  "updated_at": "ISODate"
+}
+```
+
+索引：`creator_id`、`created_at`。
+
+**题目结构**（按 `type` 区分）：
+
+```json
+// 单选
+{ "id": "q1", "type": "single", "title": "...", "required": true,
+  "options": [{"label":"满意","value":"yes"}],
+  "jump_rules": [{"option_value":"no","target_question_id":"q3"}] }
+
+// 多选
+{ "id": "q2", "type": "multiple", "title": "...", "required": false,
+  "options": [...], "min_choices": 1, "max_choices": 2, "jump_rules": [] }
+
+// 文本
+{ "id": "q3", "type": "text", "title": "...", "required": false,
+  "min_length": 0, "max_length": 200, "jump_rules": [] }
+
+// 数字
+{ "id": "q4", "type": "number", "title": "...", "required": true,
+  "min_value": 1, "max_value": 10, "integer_only": true, "jump_rules": [] }
+```
+
+**跳转规则**：`target_question_id` 为 `null` 表示结束问卷；按顺序匹配，命中即跳。
+
+### responses
+
+```json
+{
+  "_id": "ObjectId",
+  "survey_id": "ObjectId",
+  "user_id": "字符串 user id | null",
+  "is_anonymous": false,
+  "answers": [
+    { "question_id": "q1", "value": "yes" },
+    { "question_id": "q2", "value": ["ui", "speed"] },
+    { "question_id": "q4", "value": 8 }
+  ],
+  "submitted_at": "ISODate"
+}
+```
+
+索引：`survey_id`、`submitted_at`。
+
+> 只存实际被访问到的题目；被跳转跳过的不写入，因此统计中"该题回答人数"可能小于总回答数。
+
+---
+
+## ✅ 校验设计
+
+校验分四层：
+
+1. **Pydantic 结构校验**（创建时）：题目 id 唯一、跳转目标存在、多选数量关系、文本/数字范围关系 → 422
+2. **业务规则校验**：用户名唯一、问卷存在、权限（创建者/匿名访问）、匿名与重复提交约束 → 403/404/409
+3. **提交时按路径校验**：先算跳转路径，只校验被访问到的题；各题型按选项/数量/长度/范围校验 → 400
+4. **前端即时校验**：逐题校验，提升体验；后端始终复核
+
+---
+
+## ⚠️ 常见问题
+
+### 1. `bcrypt` 与 `passlib` 不兼容
+
+确保 `bcrypt==4.0.1`（已在 `requirements.txt` 中锁定）。验证：
 
 ```bash
-curl http://localhost:8000/api/surveys/<survey_id>/stats \
-  -H "Authorization: Bearer $TOKEN"
+python -c "import bcrypt; print(bcrypt.__version__)"
 ```
+
+### 2. 启动种子数据报 `E11000 duplicate key ... email_1`
+
+`users` 集合存在遗留的唯一索引 `email_1`。删除它：
+
+```javascript
+// mongosh
+use survey_db
+db.users.dropIndex("email_1")
+```
+
+`seed_test_data.py` 已内置清理逻辑。
+
+### 3. 登录后个人主页为空 / 非匿名问卷打不开
+
+通常是 `creator_id` / `user_id` 的 ObjectId 与字符串类型不一致。运行迁移：
+
+```bash
+cd backend
+python fix_ids.py
+```
+
+### 4. 前端跨域失败
+
+后端 CORS 已允许 `http://localhost:5000` 与 `http://127.0.0.1:5000`。若前端用其他端口，请修改 `backend/app/main.py` 的 `allow_origins`。
+
+### 5. 前端请求后端地址
+
+默认在 `frontend/js/api.js` 顶部：
+
+```javascript
+const API_BASE = "http://localhost:8000";
+```
+
+如需修改后端地址，改这里即可。
