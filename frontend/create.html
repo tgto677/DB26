@@ -28,6 +28,7 @@
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h3 style="margin:0;">题目</h3>
+      <button class="btn" onclick="openBankPicker()">从题目库添加</button>
       <button class="btn btn-primary" onclick="addQuestion()">+ 添加题目</button>
     </div>
     <div id="questions" style="margin-top:14px;"></div>
@@ -155,7 +156,10 @@ function questionHtml(q, idx) {
   <div class="question-block">
     <div class="question-head">
       <span class="qid">第 ${idx + 1} 题 · id=${q.id}</span>
-      <button class="btn btn-sm btn-danger" onclick="removeQuestion('${q.id}')">删除题目</button>
+      <div>
+        <button class="btn btn-sm" onclick="saveToBank('${q.id}')">存入题目库</button>
+        <button class="btn btn-sm btn-danger" onclick="removeQuestion('${q.id}')">删除题目</button>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group" style="flex:3;">
@@ -250,6 +254,111 @@ async function saveSurvey() {
   } catch (e) {
     errEl.textContent = e.detail || "保存失败";
   }
+}
+
+// 把当前编辑器里的题目结构转成可保存的 payload（复用 buildPayload 的题目部分逻辑）
+function currentQuestionPayload(qid) {
+  const q = findQ(qid);
+  if (!q.title.trim()) throw "题目标题不能为空";
+  const base = { id: q.id, title: q.title.trim(), required: !!q.required, type: q.type, jump_rules: [] };
+  if (q.type === "single" || q.type === "multiple") {
+    const options = q.options
+      .map((o) => ({ label: (o.label || "").trim(), value: (o.value || "").trim() }))
+      .filter((o) => o.label && o.value);
+    if (options.length < 1) throw `「${q.title}」至少一个有效选项（文字和值都必填）`;
+    base.options = options;
+    if (q.type === "multiple") {
+      base.min_choices = q.min_choices || 0;
+      base.max_choices = q.max_choices ?? null;
+    }
+  } else if (q.type === "text") {
+    base.min_length = q.min_length || 0;
+    base.max_length = q.max_length ?? null;
+  } else if (q.type === "number") {
+    base.min_value = q.min_value ?? null;
+    base.max_value = q.max_value ?? null;
+    base.integer_only = !!q.integer_only;
+  }
+  return base;
+}
+
+async function saveToBank(qid) {
+  let payload;
+  try {
+    payload = currentQuestionPayload(qid);
+  } catch (e) {
+    alert(e);
+    return;
+  }
+  const name = prompt("给这道题起个名字（便于识别，可留空用标题）", payload.title);
+  if (name === null) return; // 取消
+  try {
+    await api.saveBank(payload, name.trim() || payload.title);
+    alert("已存入题目库");
+  } catch (e) {
+    alert(e.detail || "保存失败");
+  }
+}
+
+// 从题目库插入
+let bankCache = null;
+
+async function openBankPicker() {
+  const modal = document.getElementById("bankModal");
+  modal.classList.remove("hidden");
+  const el = document.getElementById("bankList");
+  el.innerHTML = `<p class="muted">加载中…</p>`;
+  try {
+    bankCache = await api.listBank();
+    if (!bankCache.length) {
+      el.innerHTML = `<p class="muted">题目库为空。</p>`;
+      return;
+    }
+    el.innerHTML = bankCache.map((item) => {
+      const q = item.question;
+      return `
+        <div class="card" style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+            <div>
+              <strong>${escapeHtml(item.name || q.title)}</strong>
+              <div class="muted" style="margin-top:4px;">
+                ${({single:"单选",multiple:"多选",text:"文本填空",number:"数字填空"})[q.type] || q.type}
+                ${q.required ? " · 必填" : ""}
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="insertFromBank('${item.id}')">插入</button>
+          </div>
+        </div>`;
+    }).join("");
+  } catch (e) {
+    el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+function closeBankPicker() {
+  document.getElementById("bankModal").classList.add("hidden");
+}
+
+function insertFromBank(itemId) {
+  const item = (bankCache || []).find((x) => x.id === itemId);
+  if (!item) return;
+  const q = JSON.parse(JSON.stringify(item.question));
+  // 重新生成题目 id，避免冲突；清空跳转规则（跨问卷复用无意义）
+  q.id = "q" + (qSeq++);
+  q.jump_rules = [];
+  // 补齐编辑器需要的字段默认值
+  q.required = !!q.required;
+  q.options = q.options || [];
+  q.min_choices = q.min_choices ?? 0;
+  q.max_choices = q.max_choices ?? null;
+  q.min_length = q.min_length ?? 0;
+  q.max_length = q.max_length ?? null;
+  q.min_value = q.min_value ?? null;
+  q.max_value = q.max_value ?? null;
+  q.integer_only = !!q.integer_only;
+  questions.push(q);
+  renderQuestions();
+  closeBankPicker();
 }
 
 if (requireLogin()) {

@@ -17,8 +17,9 @@ function requireLogin() {
       <div class="nav-inner">
         <div class="nav-brand">📋 问卷系统</div>
         <div class="nav-links">
-          ${user ? `<a href="/home.html" class="${active === 'home' ? 'active' : ''}">个人主页</a>` : ""}
-          ${user ? `<a href="/create.html" class="${active === 'create' ? 'active' : ''}">创建问卷</a>` : ""}
+        ${user ? `<a href="/home.html" class="${active === 'home' ? 'active' : ''}">个人主页</a>` : ""}
+        ${user ? `<a href="/create.html" class="${active === 'create' ? 'active' : ''}">创建问卷</a>` : ""}
+        ${user ? `<a href="/question-bank.html" class="${active === 'bank' ? 'active' : ''}">题目库</a>` : ""}
         </div>
         <div class="nav-user">
           ${
@@ -27,9 +28,6 @@ function requireLogin() {
                  <button class="btn btn-sm" onclick="logout()">退出</button>`
               : `<button class="btn btn-sm btn-primary" onclick="openAuthModal()">登录 / 注册</button>`
           }
-          ${user ? `<a href="/home.html" class="${active === 'home' ? 'active' : ''}">个人主页</a>` : ""}
-          ${user ? `<a href="/create.html" class="${active === 'create' ? 'active' : ''}">创建问卷</a>` : ""}
-          ${user ? `<a href="/question-bank.html" class="${active === 'bank' ? 'active' : ''}">题目库</a>` : ""}
         </div>
       </div>`;
   }

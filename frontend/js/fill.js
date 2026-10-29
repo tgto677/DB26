@@ -35,21 +35,75 @@ function computePath(questions, answersMap) {
   return visited;
 }
 
-async function openFillModal(surveyId) {
+// async function openFillModal(surveyId) {
+//   try {
+//     const survey = await api.getSurvey(surveyId);
+//     fillSurvey = survey;
+//     fillAnswers = {};
+//     fillPath = computePath(survey.questions, fillAnswers);
+//     fillIndex = 0;
+//     renderFillStep();
+//   } catch (e) {
+//     alert(e.detail || "无法加载问卷");
+//   }
+// }
+function ensureFillModal() {
+  if (document.getElementById("fillModal")) return;
+  const div = document.createElement("div");
+  div.id = "fillModal";
+  div.className = "modal-mask hidden";
+  div.innerHTML = `
+    <div class="modal">
+      <h3 id="fillTitle">填写问卷</h3>
+      <p class="muted" id="fillProgress"></p>
+      <div id="fillBody"></div>
+      <p class="error" id="fillError"></p>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeFillModal()">取消</button>
+        <button class="btn btn-primary" id="fillNextBtn">下一题</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function openFillModal(surveyOrId) {
   try {
-    const survey = await api.getSurvey(surveyId);
+    let survey;
+    if (surveyOrId && typeof surveyOrId === "object") {
+      survey = surveyOrId;
+    } else {
+      survey = await api.getSurvey(surveyOrId);
+    }
+    ensureFillModal();          // ← 确保弹窗 DOM 存在
     fillSurvey = survey;
     fillAnswers = {};
     fillPath = computePath(survey.questions, fillAnswers);
     fillIndex = 0;
     renderFillStep();
   } catch (e) {
-    alert(e.detail || "无法加载问卷");
+    console.error("[openFillModal] 加载问卷失败:", e);
+    alert(formatApiError(e, "无法加载问卷"));
   }
 }
 
+// 统一错误提示，便于定位
+function formatApiError(e, fallback) {
+  if (!e) return fallback;
+  if (e.status === 401) return "登录已过期，请重新登录后再试";
+  if (e.status === 403) return e.detail || "无权填写该问卷（可能需要登录）";
+  if (e.status === 404) return "问卷不存在";
+  if (e.status === 0 || e.message === "Failed to fetch") return "网络错误，请确认后端已启动";
+  return e.detail || e.message || fallback;
+}
+
+
 function renderFillStep() {
+  ensureFillModal();
   const mask = document.getElementById("fillModal");
+  if (!mask) {
+    console.error("[renderFillStep] 未找到 #fillModal");
+    return;
+  }
   mask.classList.remove("hidden");
   const body = document.getElementById("fillBody");
   const progress = document.getElementById("fillProgress");
