@@ -54,4 +54,8 @@ const api = {
   deleteBank: (id) => request(`/api/question-bank/${id}`, { method: "DELETE", auth: true }),
   shareBank: (id, username) => request(`/api/question-bank/${id}/share`, { method: "POST", body: { username }, auth: true }),
   duplicateSurvey: (id) => request(`/api/surveys/${id}/duplicate`, { method: "POST", auth: true }),
+  updateBank: (id, question, name) => request(`/api/question-bank/${id}`, { method: "PUT", body: { question, name }, auth: true }),
+  bankHistory: (id) => request(`/api/question-bank/${id}/history`, { auth: true }),
+  bankHistoryVersion: (id, version) => request(`/api/question-bank/${id}/history/${version}`, { auth: true }),
+  restoreBank: (id, version) => request(`/api/question-bank/${id}/restore/${version}`, { method: "POST", auth: true }),
 };

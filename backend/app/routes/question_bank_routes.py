@@ -1,7 +1,14 @@
 from fastapi import APIRouter, Depends
 
 from ..auth import get_current_user
-from ..schemas import QuestionBankCreate, QuestionBankOut, QuestionShareRequest
+from ..schemas import (
+    QuestionBankCreate,
+    QuestionBankOut,
+    QuestionBankUpdate,
+    QuestionBankHistoryItem,
+    QuestionBankHistoryDetail,
+    QuestionShareRequest,
+)
 from ..services import question_bank_service
 
 router = APIRouter(prefix="/api/question-bank", tags=["question-bank"])
@@ -41,4 +48,49 @@ def share_question(
     """把自己的题目分享给指定用户名（复制到对方题目库）。"""
     return question_bank_service.share_question(
         qid, str(current_user["_id"]), payload.username
+    )
+
+
+@router.put("/{qid}", response_model=QuestionBankOut)
+def update_question(
+    qid: str,
+    payload: QuestionBankUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """修改题目（仅所有者）。修改前自动保存旧版本到历史。"""
+    return question_bank_service.update_question(
+        qid, str(current_user["_id"]), payload
+    )
+
+
+@router.get("/{qid}/history", response_model=list[QuestionBankHistoryItem])
+def list_history(
+    qid: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """题目历史版本列表（倒序，仅所有者）。"""
+    return question_bank_service.list_history(qid, str(current_user["_id"]))
+
+
+@router.get("/{qid}/history/{version}", response_model=QuestionBankHistoryDetail)
+def get_history_version(
+    qid: str,
+    version: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """查看某个历史版本的完整内容（仅所有者）。"""
+    return question_bank_service.get_history_version(
+        qid, str(current_user["_id"]), version
+    )
+
+
+@router.post("/{qid}/restore/{version}", response_model=QuestionBankOut)
+def restore_version(
+    qid: str,
+    version: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """恢复到指定历史版本（仅所有者）。恢复前也会记录当前版本。"""
+    return question_bank_service.restore_version(
+        qid, str(current_user["_id"]), version
     )

@@ -78,8 +78,10 @@ async function loadList() {
                     </ul>` : ""}
                 </div>
                 <div style="display:flex;gap:8px;">
-                ${item.shared_from ? "" : `<button class="btn btn-sm" onclick="shareItem('${item.id}')">分享</button>`}
-                <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}', this)">删除</button>
+                    <button class="btn btn-sm" onclick="editItem('${item.id}')">编辑</button>
+                    <button class="btn btn-sm" onclick="openHistory('${item.id}')">历史</button>
+                    ${item.shared_from ? "" : `<button class="btn btn-sm" onclick="shareItem('${item.id}')">分享</button>`}
+                    <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}', this)">删除</button>
                 </div>
             </div>
             </div>`;
@@ -112,10 +114,274 @@ async function shareItem(id) {
   }
 }
 
+let editTarget = null;   // { id, item }
+let editDraft = null;
+
+async function editItem(id) {
+  try {
+    const list = await api.listBank();
+    editTarget = list.find((x) => x.id === id);
+    if (!editTarget) { alert("题目不存在"); return; }
+    editDraft = JSON.parse(JSON.stringify(editTarget.question));
+    editDraft.name = editTarget.name || editDraft.title || "";
+    editDraft.required = !!editDraft.required;
+    editDraft.options = editDraft.options || [];
+    editDraft.min_choices = editDraft.min_choices ?? 0;
+    editDraft.max_choices = editDraft.max_choices ?? null;
+    editDraft.min_length = editDraft.min_length ?? 0;
+    editDraft.max_length = editDraft.max_length ?? null;
+    editDraft.min_value = editDraft.min_value ?? null;
+    editDraft.max_value = editDraft.max_value ?? null;
+    editDraft.integer_only = !!editDraft.integer_only;
+    renderEditForm();
+    document.getElementById("editModal").classList.remove("hidden");
+  } catch (e) {
+    alert(e.detail || "加载失败");
+  }
+}
+
+function renderEditForm() {
+  const q = editDraft;
+  const typeOptions = [
+    ["single", "单选"], ["multiple", "多选"], ["text", "文本填空"], ["number", "数字填空"],
+  ].map(([v, l]) => `<option value="${v}" ${q.type === v ? "selected" : ""}>${l}</option>`).join("");
+
+  let body = `
+    <div class="form-group"><label>题目名称（库中显示）</label>
+      <input id="e_name" value="${escapeHtml(q.name || "")}" />
+    </div>
+    <div class="form-group"><label>题目标题</label>
+      <input id="e_title" value="${escapeHtml(q.title || "")}" />
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>题型</label>
+        <select id="e_type" onchange="onEditTypeChange(this.value)">${typeOptions}</select>
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;">
+        <label class="checkbox-line"><input type="checkbox" id="e_required" ${q.required ? "checked" : ""} /> 必填</label>
+      </div>
+    </div>`;
+
+  if (q.type === "single" || q.type === "multiple") {
+    body += `<div class="form-group"><label>选项（文字 + 值）</label><div id="e_options">`;
+    q.options.forEach((o, i) => {
+      body += `<div class="option-row">
+        <input id="e_opt_label_${i}" value="${escapeHtml(o.label || "")}" placeholder="选项文字" />
+        <input id="e_opt_value_${i}" value="${escapeHtml(o.value || "")}" placeholder="值" />
+        <button class="btn btn-sm btn-danger" onclick="removeEditOption(${i})">删</button>
+      </div>`;
+    });
+    body += `</div><button class="btn btn-sm" onclick="addEditOption()">+ 选项</button></div>`;
+    if (q.type === "multiple") {
+      body += `<div class="form-row">
+        <div class="form-group"><label>最少选择</label><input id="e_min_choices" type="number" min="0" value="${q.min_choices}" /></div>
+        <div class="form-group"><label>最多选择（空=不限）</label><input id="e_max_choices" type="number" min="1" value="${q.max_choices ?? ""}" /></div>
+      </div>`;
+    }
+  } else if (q.type === "text") {
+    body += `<div class="form-row">
+      <div class="form-group"><label>最少字数</label><input id="e_min_length" type="number" min="0" value="${q.min_length}" /></div>
+      <div class="form-group"><label>最多字数（空=不限）</label><input id="e_max_length" type="number" min="1" value="${q.max_length ?? ""}" /></div>
+    </div>`;
+  } else if (q.type === "number") {
+    body += `<div class="form-row">
+      <div class="form-group"><label>最小值（空=不限）</label><input id="e_min_value" type="number" value="${q.min_value ?? ""}" /></div>
+      <div class="form-group"><label>最大值（空=不限）</label><input id="e_max_value" type="number" value="${q.max_value ?? ""}" /></div>
+    </div>
+    <label class="checkbox-line"><input type="checkbox" id="e_integer_only" ${q.integer_only ? "checked" : ""} /> 仅整数</label>`;
+  }
+
+  document.getElementById("editForm").innerHTML = body;
+  document.getElementById("editError").textContent = "";
+}
+
+function onEditTypeChange(t) {
+  // 读取当前已填内容到 draft
+  collectEditDraft();
+  editDraft.type = t;
+  if ((t === "single" || t === "multiple") && (!editDraft.options || !editDraft.options.length)) {
+    editDraft.options = [{ label: "", value: "" }, { label: "", value: "" }];
+  }
+  renderEditForm();
+}
+
+function addEditOption() {
+  collectEditDraft();
+  editDraft.options.push({ label: "", value: "" });
+  renderEditForm();
+}
+function removeEditOption(i) {
+  collectEditDraft();
+  editDraft.options.splice(i, 1);
+  renderEditForm();
+}
+
+function collectEditDraft() {
+  const q = editDraft;
+  q.name = (document.getElementById("e_name")?.value || "").trim();
+  q.title = (document.getElementById("e_title")?.value || "").trim();
+  q.required = document.getElementById("e_required")?.checked || false;
+  if (q.type === "single" || q.type === "multiple") {
+    q.options = (q.options || []).map((o, i) => ({
+      label: (document.getElementById(`e_opt_label_${i}`)?.value || "").trim(),
+      value: (document.getElementById(`e_opt_value_${i}`)?.value || "").trim(),
+    }));
+    if (q.type === "multiple") {
+      const mc = document.getElementById("e_min_choices")?.value;
+      const xc = document.getElementById("e_max_choices")?.value;
+      q.min_choices = mc === "" ? 0 : Number(mc);
+      q.max_choices = xc === "" ? null : Number(xc);
+    }
+  } else if (q.type === "text") {
+    const ml = document.getElementById("e_min_length")?.value;
+    const xl = document.getElementById("e_max_length")?.value;
+    q.min_length = ml === "" ? 0 : Number(ml);
+    q.max_length = xl === "" ? null : Number(xl);
+  } else if (q.type === "number") {
+    const mv = document.getElementById("e_min_value")?.value;
+    const xv = document.getElementById("e_max_value")?.value;
+    q.min_value = mv === "" ? null : Number(mv);
+    q.max_value = xv === "" ? null : Number(xv);
+    q.integer_only = document.getElementById("e_integer_only")?.checked || false;
+  }
+}
+
+function closeEdit() {
+  document.getElementById("editModal").classList.add("hidden");
+}
+
+async function submitEdit() {
+  const errEl = document.getElementById("editError");
+  errEl.textContent = "";
+  try {
+    collectEditDraft();
+    const q = editDraft;
+    if (!q.title) throw "题目标题不能为空";
+    const payload = {
+      id: q.id || "q1",
+      type: q.type,
+      title: q.title,
+      required: !!q.required,
+      jump_rules: q.jump_rules || [],
+    };
+    if (q.type === "single" || q.type === "multiple") {
+      const options = (q.options || []).filter((o) => o.label && o.value);
+      if (!options.length) throw "至少一个有效选项（文字和值都必填）";
+      payload.options = options;
+      if (q.type === "multiple") {
+        payload.min_choices = q.min_choices || 0;
+        payload.max_choices = q.max_choices ?? null;
+      }
+    } else if (q.type === "text") {
+      payload.min_length = q.min_length || 0;
+      payload.max_length = q.max_length ?? null;
+    } else if (q.type === "number") {
+      payload.min_value = q.min_value ?? null;
+      payload.max_value = q.max_value ?? null;
+      payload.integer_only = !!q.integer_only;
+    }
+    await api.updateBank(editTarget.id, payload, q.name || q.title);
+    closeEdit();
+    alert("已保存，旧版本已记入历史");
+    loadList();
+  } catch (e) {
+    errEl.textContent = e.detail || e;
+  }
+}
+
+// 历史
+let historyTargetId = null;
+async function openHistory(id) {
+  historyTargetId = id;
+  document.getElementById("historyDetail").innerHTML = "";
+  document.getElementById("historyModal").classList.remove("hidden");
+  const el = document.getElementById("historyList");
+  el.innerHTML = `<p class="muted">加载中…</p>`;
+  try {
+    const items = await api.bankHistory(id);
+    if (!items.length) { el.innerHTML = `<p class="muted">暂无历史</p>`; return; }
+    el.innerHTML = items.map((it) => `
+      <div class="card" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div>
+            <strong>v${it.version}</strong>
+            <span class="badge gray" style="margin-left:8px;">${it.action}</span>
+            <div class="muted" style="margin-top:4px;">
+              ${escapeHtml(it.name || it.title)} · ${new Date(it.created_at).toLocaleString()}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm" onclick="viewHistoryVersion(${it.version})">查看</button>
+            <button class="btn btn-sm btn-primary" onclick="restoreHistory(${it.version})">恢复此版本</button>
+          </div>
+        </div>
+      </div>`).join("");
+  } catch (e) {
+    el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+function closeHistory() {
+  document.getElementById("historyModal").classList.add("hidden");
+}
+
+async function viewHistoryVersion(version) {
+  const el = document.getElementById("historyDetail");
+  el.innerHTML = `<p class="muted">加载中…</p>`;
+  try {
+    const d = await api.bankHistoryVersion(historyTargetId, version);
+    const q = d.question;
+    el.innerHTML = `
+      <div class="card">
+        <h3>v${d.version}（${d.action}）</h3>
+        <p class="muted">${escapeHtml(d.name || q.title)} · ${new Date(d.created_at).toLocaleString()}</p>
+        <pre style="white-space:pre-wrap;background:#f7f8fa;padding:10px;border-radius:8px;font-size:12px;">${escapeHtml(JSON.stringify(q, null, 2))}</pre>
+      </div>`;
+  } catch (e) {
+    el.innerHTML = `<p class="error">${escapeHtml(e.detail || "加载失败")}</p>`;
+  }
+}
+
+async function restoreHistory(version) {
+  if (!confirm(`确定恢复到 v${version} 吗？当前版本会记入历史，可再次恢复。`)) return;
+  try {
+    await api.restoreBank(historyTargetId, version);
+    alert("已恢复");
+    closeHistory();
+    loadList();
+  } catch (e) {
+    alert(e.detail || "恢复失败");
+  }
+}
+
 if (requireLogin()) {
   renderNavbar("bank");
   loadList();
 }
 </script>
+<!-- 编辑弹窗 -->
+<div id="editModal" class="modal-mask hidden">
+    <div class="modal" style="max-width:560px;">
+      <h3>编辑题目</h3>
+      <div id="editForm"></div>
+      <p class="error" id="editError"></p>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeEdit()">取消</button>
+        <button class="btn btn-primary" onclick="submitEdit()">保存</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 历史弹窗 -->
+  <div id="historyModal" class="modal-mask hidden">
+    <div class="modal" style="max-width:640px;">
+      <h3>历史版本</h3>
+      <div id="historyList"><p class="muted">加载中…</p></div>
+      <div id="historyDetail" style="margin-top:12px;"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeHistory()">关闭</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

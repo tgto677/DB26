@@ -13,6 +13,7 @@ users_collection = db["users"]
 surveys_collection = db["surveys"]
 responses_collection = db["responses"]
 question_bank_collection = db["question_bank"]
+question_bank_history_collection = db["question_bank_history"]
 
 
 def init_db() -> None:
@@ -30,6 +31,9 @@ def init_db() -> None:
 
     question_bank_collection.create_index([("owner_id", ASCENDING)])
     question_bank_collection.create_index([("created_at", ASCENDING)])
+    question_bank_history_collection.create_index([("question_id", ASCENDING), ("version", ASCENDING)], unique=True)
+    question_bank_history_collection.create_index([("question_id", ASCENDING), ("created_at", ASCENDING)])
+    question_bank_history_collection.create_index([("owner_id", ASCENDING)])
 
 def close_db() -> None:
     """关闭连接。应用关闭时调用。"""
