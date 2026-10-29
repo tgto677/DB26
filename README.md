@@ -168,9 +168,6 @@ python seed_test_data.py
 
 ## 🔌 API 概览
 
-> 完整文档见 [`API.md`](./API.md) 或运行后端后访问 `/docs`。
-> 认证方式：请求头 `Authorization: Bearer <token>`。
-
 | 方法 | 路径                       | 鉴权   | 说明             |
 | ---- | -------------------------- | ------ | ---------------- |
 | POST | `/api/auth/register`       | 公开   | 注册并返回 token |
